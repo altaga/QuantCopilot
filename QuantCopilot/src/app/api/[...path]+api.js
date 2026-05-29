@@ -6,7 +6,7 @@ import secureApp from '../../server/secure';
 const app = new Hono().basePath('/api');
 
 const ALLOWED_ORIGINS = [
-  "https://YOUR_WEBSITE_URL.com", 
+  "https://quantcopilot.expo.app", 
   "http://localhost:8081" 
 ];
 

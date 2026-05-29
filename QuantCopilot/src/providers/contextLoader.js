@@ -3,23 +3,23 @@ import { getAsyncStorageValue } from "../utilsApp/utils";
 import ContextModule from "./contextModule";
 
 export default function ContextLoader() {
-  const context = useContext(ContextModule);
+  const { setValue } = useContext(ContextModule);
   const checkStarter = useCallback(async () => {
     try {
       const selectedExchange = await getAsyncStorageValue("selectedExchange");
       if (selectedExchange !== null) {
-        context.setValue({
+        setValue({
           selectedExchange,
           starter: true,
         });
       } else {
-        context.setValue({ starter: true });
+        setValue({ starter: true });
       }
     } catch (e) {
       console.warn("Failed loading context schema", e);
-      context.setValue({ starter: true });
+      setValue({ starter: true });
     }
-  }, [context]);
+  }, [setValue]);
 
   useEffect(() => {
     checkStarter();

@@ -1,25 +1,27 @@
-import { Hono } from 'hono';
-import crypto from 'crypto';
-import { Buffer } from 'buffer';
+import { Hono } from "hono";
+import crypto from "crypto";
+import { Buffer } from "buffer";
+import console from "console";
 
 const secureApp = new Hono();
 
 // Security logging middleware
-secureApp.use('*', async (c, next) => {
+secureApp.use("*", async (c, next) => {
   console.log(`🔒 Accessing secure endpoint: ${c.req.path}`);
   await next();
 });
 
 // Helper for JWT generation
 function base64url(buf) {
-  return buf.toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+  return buf
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 }
 
-// Token route
-secureApp.get('/token', (c) => {
+// Token route — payload must match ws_server/generator.js exactly
+secureApp.get("/token", (c) => {
   const secret = process.env.WSS_SECRET;
   if (!secret) {
     return c.json({ error: "WSS_SECRET server configuration missing" }, 500);
@@ -34,14 +36,15 @@ secureApp.get('/token', (c) => {
       role: "ccm_app",
       iss: "altaga",
       iat: now,
-      exp: now + 3600 // 1 hour expiration
+      exp: now + 3600, // 1 hour
     };
 
     const encodedHeader = base64url(Buffer.from(JSON.stringify(header)));
     const encodedPayload = base64url(Buffer.from(JSON.stringify(payload)));
     const signatureInput = `${encodedHeader}.${encodedPayload}`;
 
-    const signature = crypto.createHmac('sha512', secret)
+    const signature = crypto
+      .createHmac("sha512", secret)
       .update(signatureInput)
       .digest();
 
@@ -54,19 +57,19 @@ secureApp.get('/token', (c) => {
 });
 
 // Secure greeting route
-secureApp.get('/helloSecure', (c) => {
-  return c.json({ 
-    status: "secured_access", 
+secureApp.get("/helloSecure", (c) => {
+  return c.json({
+    status: "secured_access",
     data: "Operational metrics",
-    channel: "secure" 
+    channel: "secure",
   });
 });
 
-secureApp.post('/helloSecure', (c) => {
-  return c.json({ 
-    status: "secured_access", 
+secureApp.post("/helloSecure", (c) => {
+  return c.json({
+    status: "secured_access",
     data: "Operational metrics",
-    channel: "secure" 
+    channel: "secure",
   });
 });
 

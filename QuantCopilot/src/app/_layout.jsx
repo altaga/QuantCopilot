@@ -1,6 +1,8 @@
-import '../core/polyfills';
-import { ContextProvider } from '../providers/contextModule';
-import ContextLoader from '../providers/contextLoader';
+// Polyfills MUST be first — shim Node.js built-ins before any module loads them
+import "../core/polyfills";
+
+import { ContextProvider } from "../providers/contextModule";
+import ContextLoader from "../providers/contextLoader";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React from "react";

@@ -15,7 +15,7 @@ export default function SplashLoading() {
     if (context && context.value && context.value.starter) {
       navigation.navigate("(screens)/main");
     }
-  }, [context?.value?.starter, navigation, context]);
+  }, [context?.value?.starter, navigation]);
 
   return (
     <View style={[GlobalStyles.container, styles.centerContent]}>

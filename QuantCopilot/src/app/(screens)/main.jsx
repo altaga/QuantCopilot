@@ -1,327 +1,653 @@
-import React, { useEffect, useState, useRef, useContext } from 'react';
-import { 
-  Text, 
-  View, 
-  ScrollView, 
-  SafeAreaView, 
-  StatusBar, 
-  Platform, 
-  Pressable, 
-  StyleSheet, 
-  Dimensions 
-} from 'react-native';
-import mqtt from 'mqtt/dist/mqtt';
-import { createGlobalStyles, backgroundColor, accentColor, borderColor, cardColor, textSecondary } from '../../core/styles';
-import ContextModule from '../../providers/contextModule';
+import React, { useEffect, useState, useRef, useContext } from "react";
+import { createChart, LineSeries } from "lightweight-charts";
+import {
+  Text,
+  View,
+  ScrollView,
+  SafeAreaView,
+  StatusBar,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Dimensions,
+} from "react-native";
+import { createMqttClient } from "../../utilsApp/mqttClient";
+import { getMqttToken } from "../../utilsApp/tokenGenerator";
+import { remoteLog } from "../../utilsApp/remoteLog";
+import {
+  createGlobalStyles,
+  backgroundColor,
+  accentColor,
+  borderColor,
+  cardColor,
+  textSecondary,
+} from "../../core/styles";
+import ContextModule from "../../providers/contextModule";
 
-const BROKER_URL = process.env.EXPO_PUBLIC_MQTT_URL || 'wss://websocket.blankit.dpdns.org';
-const TOPIC = 'market/btc/ticker';
+const BROKER_URL =
+  process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
+const TOPIC = "market/btc/ticker";
+
+remoteLog("Module loaded", "INFO", "BOOT");
+
+const EXCHANGES = [
+  "Binance",
+  "Kraken",
+  "Coinbase",
+  "OKX",
+  "Bitfinex",
+  "Bybit",
+  "Gateio",
+  "Gemini",
+  "Bitstamp",
+  "Kucoin",
+];
+
+const ArbitrageFeed = React.memo(({ alerts }) => {
+  const GlobalStyles = createGlobalStyles();
+  
+  return (
+    <View style={styles.feedCard}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={GlobalStyles.sectionHeader}>Arbitrage Alert Feed</Text>
+        <Text style={[styles.monoLabel, { color: "#38bdf8" }]}>HFT</Text>
+      </View>
+      
+      {alerts.length === 0 ? (
+        <View style={styles.emptyFeed}>
+          <Text style={styles.emptyFeedText}>NO ARBITRAGE OPPORTUNITIES DETECTED</Text>
+          <Text style={styles.emptyFeedSubtext}>Monitoring live orderbooks at 2 Hz...</Text>
+        </View>
+      ) : (
+        <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled={true}>
+          {alerts.map((alert, idx) => {
+            const timeStr = alert.timestamp 
+              ? new Date(alert.timestamp * 1000).toLocaleTimeString()
+              : new Date().toLocaleTimeString();
+            return (
+              <View key={alert.id || idx} style={styles.alertItem}>
+                <View style={styles.alertHeader}>
+                  <Text style={styles.alertId}>{alert.id || "ARB-GENERIC"}</Text>
+                  <Text style={styles.alertTime}>{timeStr}</Text>
+                </View>
+                
+                <View style={styles.alertRouteRow}>
+                  <View style={styles.routeBadgeBuy}>
+                    <Text style={styles.routeBadgeText}>BUY: {alert.compraEn}</Text>
+                  </View>
+                  <Text style={styles.routeArrow}>➔</Text>
+                  <View style={styles.routeBadgeSell}>
+                    <Text style={styles.routeBadgeText}>SELL: {alert.vendeEn}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.alertDataRow}>
+                  <View>
+                    <Text style={styles.alertDataLabel}>Prices (B / S)</Text>
+                    <Text style={styles.alertDataVal}>
+                      ${alert.precioCompra?.toLocaleString(undefined, { minimumFractionDigits: 1 })} / ${alert.precioVenta?.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.alertDataLabel}>Vol / Profit</Text>
+                    <Text style={styles.alertDataVal}>
+                      {alert.volumen} BTC | <Text style={styles.alertProfitText}>+${parseFloat((alert.profitTotalUSD ?? 0).toFixed(2))}</Text>
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
+  );
+});
 
 export default function MainScreen() {
   const context = useContext(ContextModule);
   const GlobalStyles = createGlobalStyles();
 
+  useEffect(() => {
+    remoteLog("Component mounted", "INFO", "BOOT");
+  }, []);
+
   const [isConnected, setIsConnected] = useState(false);
-  const [marketData, setMarketData] = useState({});
+  const [marketData, setMarketData] = useState({}); // latest values for stats bar
+  const [marketHistory, setMarketHistory] = useState({}); // 50-tick history per exchange
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [latency, setLatency] = useState(0);
-  const [selectedExchange, setSelectedExchange] = useState(context?.value?.selectedExchange || "Binance");
+  const [selectedExchange, setSelectedExchange] = useState(
+    context?.value?.selectedExchange || "Binance",
+  );
   const [token, setToken] = useState(null);
-
-  // Chart refs
+  const [tokenError, setTokenError] = useState(null);
+  const [exchangeFees, setExchangeFees] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [truePrice, setTruePrice] = useState(null);
   const chartContainerRef = useRef(null);
-  const lineSeriesRef = useRef(null);
   const chartRef = useRef(null);
+  const chartDataRef = useRef([]);
+  const lineSeriesRef = useRef(null);
+  const selectedExchangeRef = useRef(selectedExchange);
+  const historyLoadedRef = useRef(false);
+  const marketHistoryRef = useRef({});
 
-  // Update global context value when exchange changes
   const handleSelectExchange = (exchange) => {
     setSelectedExchange(exchange);
+    selectedExchangeRef.current = exchange;
     if (context && context.setValue) {
       context.setValue({ selectedExchange: exchange });
     }
+    // Rebuild chart from existing history for the new exchange
+    const history = marketHistoryRef.current[exchange] || [];
+    if (lineSeriesRef.current && history.length > 0) {
+      const points = history.map((tick) => ({
+        time: tick.ts,
+        value: (tick.bid + tick.ask) / 2,
+      }));
+      // Filter out duplicate timestamps keeping the latest one for lightweight-charts
+      const uniquePoints = [];
+      const seenTimes = new Set();
+      for (let i = points.length - 1; i >= 0; i--) {
+        const p = points[i];
+        if (!seenTimes.has(p.time)) {
+          seenTimes.add(p.time);
+          uniquePoints.unshift(p);
+        }
+      }
+      chartDataRef.current = uniquePoints;
+      lineSeriesRef.current.setData(uniquePoints);
+      chartRef.current?.timeScale().fitContent();
+    }
   };
 
-  // Initialize Lightweight Charts (Web Only)
+  // ─── Generate JWT locally (same library/params as ws_server/generator.js) ─────
   useEffect(() => {
-    if (Platform.OS === 'web' && chartContainerRef.current) {
-      try {
-        const { createChart } = require('lightweight-charts');
-        
-        const chart = createChart(chartContainerRef.current, {
-          layout: { 
-            background: { type: 'solid', color: backgroundColor }, 
-            textColor: '#8E8E93',
-            fontSize: 11,
-          },
-          grid: { 
-            vertLines: { color: '#1F1F22' }, 
-            horzLines: { color: '#1F1F22' } 
-          },
-          timeScale: { 
-            timeVisible: true, 
-            secondsVisible: true,
-            borderVisible: false,
-          },
-          rightPriceScale: {
-            borderVisible: false,
-            alignLabels: true,
-          },
-          height: 320,
-        });
-
-        const lineSeries = chart.addLineSeries({
-          color: accentColor, 
-          lineWidth: 2,
-          priceFormat: {
-            type: 'price',
-            precision: 2,
-            minMove: 0.01,
-          },
-        });
-
-        lineSeriesRef.current = lineSeries;
-        chartRef.current = chart;
-
-        // Make chart responsive
-        const handleResize = () => {
-          if (chartContainerRef.current && chartRef.current) {
-            chartRef.current.applyOptions({
-              width: chartContainerRef.current.clientWidth
-            });
-          }
-        };
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-          window.removeEventListener('resize', handleResize);
-          chart.remove();
-        };
-      } catch (err) {
-        console.warn("Failed to initialize TradingView Chart:", err);
+    getMqttToken().then((token) => {
+      if (token) {
+        remoteLog(`Token ready len=${token.length}`, "INFO", "TOKEN");
+        setToken(token);
+        setTokenError(null);
+      } else {
+        remoteLog("Token unavailable", "ERROR", "TOKEN");
+        setTokenError("WSS_SECRET not set");
       }
-    }
+    });
   }, []);
 
-  // Fetch dynamic JWT token from API route
+  // ─── Chart (hardcoded test) ────────────────────────────────────────────
   useEffect(() => {
-    const loadToken = async () => {
-      try {
-        let tokenUrl = '/api/secure/token';
-        if (Platform.OS !== 'web') {
-          tokenUrl = 'http://localhost:8081/api/secure/token';
-        }
-        const response = await fetch(tokenUrl);
-        const data = await response.json();
-        if (data.token) {
-          setToken(data.token);
-        } else if (process.env.EXPO_PUBLIC_MQTT_JWT) {
-          setToken(process.env.EXPO_PUBLIC_MQTT_JWT);
-        }
-      } catch (err) {
-        console.warn("Failed to fetch dynamic JWT token, using fallback:", err);
-        if (process.env.EXPO_PUBLIC_MQTT_JWT) {
-          setToken(process.env.EXPO_PUBLIC_MQTT_JWT);
-        }
-      }
+    if (!chartContainerRef.current) return;
+
+    const formatTime = (time) => {
+      const date = new Date(time);
+      if (isNaN(date.getTime())) return "";
+      const pad = (num) => num.toString().padStart(2, "0");
+      const ms = date.getMilliseconds().toString().padStart(3, "0");
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${ms}`;
     };
-    loadToken();
+
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 300,
+      layout: {
+        background: { color: "#0F0F11" },
+        textColor: "#FFFFFF",
+      },
+      grid: {
+        vertLines: { color: "#1F1F23" },
+        horzLines: { color: "#1F1F23" },
+      },
+      localization: {
+        timeFormatter: formatTime,
+      },
+      timeScale: {
+        visible: true,
+        tickMarkFormatter: formatTime,
+      },
+      priceScale: { visible: true },
+    });
+
+    const lineSeries = chart.addSeries(LineSeries, {
+      color: "#34d399",
+      lineWidth: 2,
+    });
+
+    lineSeriesRef.current = lineSeries;
+    chartRef.current = chart;
+
+    return () => chart.remove();
   }, []);
 
-  // Sync chart data when selected exchange changes
+  // ─── Establish MQTT connection ─────────────────────────────────────────────
   useEffect(() => {
-    if (lineSeriesRef.current) {
-      // Reset series data to avoid line jump artifacts
-      lineSeriesRef.current.setData([]);
+    if (!token) {
+      if (tokenError)
+        remoteLog(`Token unavailable, WS skipped: ${tokenError}`, "WARN", "WS");
+      return;
     }
-  }, [selectedExchange]);
 
-  // Establish MQTT connection
-  useEffect(() => {
-    if (!token) return;
+    let reconnectTimer = null;
+    let activeClient = null;
 
-    let client = null;
-    try {
-      client = mqtt.connect(BROKER_URL, {
-        username: 'ccm_id',
+    const connect = () => {
+      remoteLog(`WS: connecting... tokenLen=${token.length}`, "INFO", "WS");
+      remoteLog(`WS: token JWT header=${token.split(".")[0]}`, "INFO", "WS");
+      activeClient = createMqttClient(BROKER_URL, {
+        username: "ccm_id",
         password: token,
-        protocol: 'wss'
       });
 
-      client.on('connect', () => {
+      activeClient.on("connect", () => {
+        remoteLog("WS connected", "INFO", "WS");
         setIsConnected(true);
-        client.subscribe(TOPIC);
+        activeClient.subscribe(TOPIC);
+        activeClient.subscribe("ARBITRAGE_ALERTS");
       });
 
-      client.on('message', (topic, message) => {
+      activeClient.on("message", (topic, message) => {
         try {
-          const startTime = Date.now();
-          const envelope = JSON.parse(message.toString());
-          let payload = envelope.payload ? (typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload) : envelope;
-          const data = payload.data || payload;
+          let raw = message.toString();
+          if (!raw || raw === "[object Object]") return;
+          const data = JSON.parse(raw);
+          if (!data || typeof data !== "object") return;
 
-          setMarketData(data);
-          setLastUpdate(new Date().toLocaleTimeString());
-          setLatency(Date.now() - startTime);
-
-          // Update chart line points with selected exchange price
-          if (data[selectedExchange] && data[selectedExchange].ask && lineSeriesRef.current) {
-            const currentTime = Math.floor(Date.now() / 1000);
-            lineSeriesRef.current.update({
-              time: currentTime,
-              value: parseFloat(data[selectedExchange].ask)
-            });
+          // ── Fees message: store in state ──────────────────────────────────
+          if (topic === "market/btc/ticker/fees") {
+            setExchangeFees(data);
+            return;
           }
-        } catch (_e) {
-          // Parse error
+
+          // ── Arbitrage Alerts message: prepend and slice to max 50 ───────────
+          if (topic === "ARBITRAGE_ALERTS") {
+            setAlerts((prev) => [data, ...prev].slice(0, 50));
+            return;
+          }
+
+          // ── History message: fill chart with last 50 values ─────────────────
+          if (topic && topic.endsWith("/history")) {
+            remoteLog(`Received historical data payload on topic: ${topic}`, "INFO", "HISTORY");
+            if (historyLoadedRef.current) return;
+            historyLoadedRef.current = true;
+
+            if (!data) return;
+            // Each item in history should have numeric ts
+            const histData = Array.isArray(data) ? data : [data];
+            if (!histData.length) return;
+
+            const chartPoints = [];
+            const latestSnapshots = {};
+            const newHistory = {};
+
+            histData.forEach((snap) => {
+              if (!snap || typeof snap.ts !== "number" || !isFinite(snap.ts))
+                return;
+              const snapData = snap.data || snap;
+              EXCHANGES.forEach((ex) => {
+                const exData = snapData && snapData[ex];
+                if (!exData) return;
+                const bid = parseFloat(exData.bid);
+                const ask = parseFloat(exData.ask);
+                if (!bid || !ask || isNaN(bid) || isNaN(ask)) return;
+                const tick = {
+                  bid,
+                  ask,
+                  spread: ask - bid,
+                  ts: snap.ts,
+                };
+                const history = newHistory[ex] || [];
+                newHistory[ex] = [...history, tick]
+                  .slice(-300)
+                  .filter((t) => t && t.bid && t.ask && t.ts && isFinite(t.ts));
+                latestSnapshots[ex] = exData;
+              });
+              if (snap.ts) {
+                const exData = latestSnapshots[selectedExchangeRef.current];
+                if (exData && exData.bid && exData.ask) {
+                  const mid =
+                    (parseFloat(exData.bid) + parseFloat(exData.ask)) / 2;
+                  chartPoints.push({
+                    time: snap.ts,
+                    value: mid,
+                  });
+                }
+              }
+            });
+
+            marketHistoryRef.current = newHistory;
+            setMarketHistory(newHistory);
+            setMarketData(latestSnapshots);
+            setLastUpdate(new Date());
+
+            const validPoints = chartPoints.filter(
+              (p) =>
+                p &&
+                p.time != null &&
+                p.value != null &&
+                !isNaN(p.time) &&
+                !isNaN(p.value),
+            );
+            // Filter out duplicate timestamps keeping the latest one for lightweight-charts
+            const uniquePoints = [];
+            const seenTimes = new Set();
+            for (let i = validPoints.length - 1; i >= 0; i--) {
+              const p = validPoints[i];
+              if (!seenTimes.has(p.time)) {
+                seenTimes.add(p.time);
+                uniquePoints.unshift(p);
+              }
+            }
+            if (lineSeriesRef.current && uniquePoints.length > 0) {
+              chartDataRef.current = uniquePoints;
+              lineSeriesRef.current.setData(uniquePoints);
+              chartRef.current?.timeScale().fitContent();
+              remoteLog(`Applied ${uniquePoints.length} unique history chart points for ${selectedExchangeRef.current}`, "INFO", "HISTORY");
+            } else {
+              remoteLog(`No chart points to render from history data`, "WARN", "HISTORY");
+            }
+            return;
+          }
+
+          // ── Live message: append new tick ─────────────────────────────────
+          if (typeof data.ts !== "number" || !isFinite(data.ts)) return;
+          if (!data) return;
+          const priceData = data.data || data;
+          if (!priceData || typeof priceData !== "object") return;
+          setMarketData(priceData);
+          setLastUpdate(new Date());
+          if (typeof data.truePrice === "number") {
+            setTruePrice(data.truePrice);
+          }
+
+          // Build rolling 50-tick history per exchange
+          const newHistory = { ...marketHistoryRef.current };
+          EXCHANGES.forEach((ex) => {
+            const exData = priceData[ex];
+            if (!exData) return;
+            const bid = parseFloat(exData.bid);
+            const ask = parseFloat(exData.ask);
+            if (!bid || !ask) return;
+            const tick = {
+              bid,
+              ask,
+              spread: ask - bid,
+              ts: data.ts,
+            };
+            if (!tick.ts || isNaN(tick.bid) || isNaN(tick.ask)) return;
+            const history = newHistory[ex] || [];
+            newHistory[ex] = [...history, tick]
+              .slice(-300)
+              .filter((t) => t && t.bid && t.ask && t.ts);
+          });
+          marketHistoryRef.current = newHistory;
+          setMarketHistory(newHistory);
+
+          // Feed chart with selected exchange mid price
+          const exData = priceData[selectedExchangeRef.current];
+          if (exData && exData.bid && exData.ask) {
+            const mid = (parseFloat(exData.bid) + parseFloat(exData.ask)) / 2;
+            if (!mid || isNaN(mid)) return;
+            const time = data.ts;
+            if (!lineSeriesRef.current) return;
+            if (
+              !historyLoadedRef.current ||
+              chartDataRef.current.length === 0
+            ) {
+              chartDataRef.current = [{ time, value: mid }];
+              lineSeriesRef.current.setData(chartDataRef.current);
+              chartRef.current?.timeScale().fitContent();
+              historyLoadedRef.current = true;
+            } else {
+              lineSeriesRef.current.update({ time, value: mid });
+            }
+          }
+        } catch (e) {
+          remoteLog(`WS parse error: ${e.message}`, "ERROR", "WS");
         }
       });
 
-      client.on('error', () => {
+      activeClient.on("error", (err) => {
+        remoteLog(`WS error: ${err.message || err}`, "ERROR", "WS");
         setIsConnected(false);
       });
 
-      client.on('close', () => {
+      activeClient.on("close", () => {
+        remoteLog("WS disconnected — reconnecting in 5s", "WARN", "WS");
         setIsConnected(false);
+        reconnectTimer = setTimeout(connect, 5000);
       });
+    };
 
-    } catch (err) {
-      console.warn("MQTT Connection Error:", err);
-    }
+    connect();
 
     return () => {
-      if (client) client.end();
+      clearTimeout(reconnectTimer);
+      if (activeClient) activeClient.end();
     };
-  }, [selectedExchange, token]);
+  }, [token, tokenError]);
 
-  // Get active price metrics for header highlight
-  const activeExchangeData = marketData[selectedExchange] || {};
-  const activeBid = activeExchangeData.bid ? parseFloat(activeExchangeData.bid) : 0;
-  const activeAsk = activeExchangeData.ask ? parseFloat(activeExchangeData.ask) : 0;
-  const activeSpread = activeAsk - activeBid;
+  // ─── Render ───────────────────────────────────────────────────────────────
+  const selectedData = marketData[selectedExchange] || {};
+  const selectedBid = selectedData.bid ? parseFloat(selectedData.bid) : 0;
+  const selectedAsk = selectedData.ask ? parseFloat(selectedData.ask) : 0;
+  const selectedMid =
+    selectedBid > 0 && selectedAsk > 0 ? (selectedBid + selectedAsk) / 2 : 0;
+  const selectedSpread = selectedAsk - selectedBid;
 
-  const isLargeScreen = Platform.OS === 'web' && Dimensions.get('window').width > 768;
+  const isLargeScreen =
+    Platform.OS === "web" && Dimensions.get("window").width > 768;
 
   return (
     <SafeAreaView style={GlobalStyles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* ─── Premium Header ─── */}
       <View style={GlobalStyles.header}>
         <View>
           <Text style={styles.brandText}>QUANTCOPILOT</Text>
           <Text style={styles.subBrandText}>REAL-TIME ORDERBOOK FEED</Text>
         </View>
         <View style={styles.statusWrapper}>
-          <View style={[styles.statusDot, { backgroundColor: isConnected ? '#34d399' : '#f87171' }]} />
-          <Text style={styles.statusText}>{isConnected ? 'LIVE FEED ACTIVE' : 'DISCONNECTED'}</Text>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: isConnected ? "#34d399" : "#f87171" },
+            ]}
+          />
+          <Text style={styles.statusText}>
+            {isConnected ? "LIVE FEED ACTIVE" : "DISCONNECTED"}
+          </Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* ─── Global Stats Bar ─── */}
+        {/* ─── Stats Bar ─── */}
         <View style={styles.statsBar}>
           <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Active Asset</Text>
-            <Text style={styles.statMainVal}>BTC / USD</Text>
+            <Text style={GlobalStyles.labelSmall}>Asset</Text>
+            <Text style={styles.statMainVal}>BTC/USD</Text>
           </View>
           <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Chart Focus</Text>
-            <Text style={[styles.statMainVal, { color: accentColor }]}>{selectedExchange.toUpperCase()}</Text>
+            <Text style={GlobalStyles.labelSmall}>Mid</Text>
+            <Text style={[styles.statMainVal, { color: accentColor }]}>
+              {selectedMid > 0 ? `$${selectedMid.toLocaleString()}` : "---"}
+            </Text>
           </View>
           <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Market Ask Price</Text>
-            <Text style={styles.statMainVal}>${activeAsk > 0 ? activeAsk.toLocaleString() : '---'}</Text>
+            <Text style={GlobalStyles.labelSmall}>True Price (VWAP)</Text>
+            <Text style={[styles.statMainVal, { color: "#38bdf8" }]}>
+              {truePrice > 0 ? `$${truePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "---"}
+            </Text>
           </View>
           <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Exchange Spread</Text>
-            <Text style={styles.statMainVal}>${activeSpread > 0 ? activeSpread.toFixed(1) : '---'}</Text>
+            <Text style={GlobalStyles.labelSmall}>Bid</Text>
+            <Text style={styles.statMainVal}>
+              {selectedBid > 0 ? `$${selectedBid.toLocaleString()}` : "---"}
+            </Text>
           </View>
           <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Feed Latency</Text>
-            <Text style={styles.statMainVal}>{latency}ms</Text>
+            <Text style={GlobalStyles.labelSmall}>Ask</Text>
+            <Text style={styles.statMainVal}>
+              {selectedAsk > 0 ? `$${selectedAsk.toLocaleString()}` : "---"}
+            </Text>
+          </View>
+          <View style={styles.statColumn}>
+            <Text style={GlobalStyles.labelSmall}>Spread</Text>
+            <Text style={styles.statMainVal}>
+              {selectedSpread > 0 ? `$${parseFloat(selectedSpread.toFixed(4))}` : "---"}
+            </Text>
           </View>
         </View>
 
-        {/* ─── Responsive Layout Grid ─── */}
-        <View style={[styles.layoutGrid, isLargeScreen && styles.layoutGridRow]}>
-          
-          {/* Left Column - Charting */}
-          <View style={[styles.leftColumn, isLargeScreen && { flex: 2, marginRight: 24 }]}>
+        {/* ─── Layout Grid ─── */}
+        <View
+          style={[styles.layoutGrid, isLargeScreen && styles.layoutGridRow]}
+        >
+          {/* Chart placeholder */}
+          <View
+            style={[
+              styles.leftColumn,
+              isLargeScreen && { flex: 2, marginRight: 24 },
+            ]}
+          >
             <View style={styles.sectionTitleRow}>
-              <Text style={GlobalStyles.sectionHeader}>Institutional Price Index</Text>
-              <Text style={styles.monoLabel}>TICK-BY-TICK FEED</Text>
+              <Text style={GlobalStyles.sectionHeader}>
+                {selectedExchange} Mid Price
+              </Text>
+              <Text style={styles.monoLabel}>LIVE</Text>
             </View>
-
             <View style={styles.chartCard}>
-              {Platform.OS === 'web' ? (
-                <div ref={chartContainerRef} style={{ width: '100%', minHeight: '320px' }} />
-              ) : (
-                <View style={styles.mobileChartPlaceholder}>
-                  <Text style={GlobalStyles.bodyText}>
-                    Interactive chart is optimized for Web.
-                  </Text>
-                  <Text style={[GlobalStyles.bodyText, { fontSize: 13, marginTop: 8 }]}>
-                    Selected Exchange: {selectedExchange} (Ask: ${activeAsk})
-                  </Text>
-                </View>
-              )}
+              <View
+                ref={chartContainerRef}
+                style={{ width: "100%", height: 300 }}
+                onLayout={(e) => {
+                  if (chartRef.current) {
+                    chartRef.current.resize(e.nativeEvent.layout.width, 300);
+                  }
+                }}
+              />
             </View>
+            <ArbitrageFeed alerts={alerts} />
           </View>
 
-          {/* Right Column - Exchange Table Grid */}
+          {/* Exchange Table */}
           <View style={[styles.rightColumn, isLargeScreen && { flex: 1 }]}>
             <View style={styles.sectionTitleRow}>
-              <Text style={GlobalStyles.sectionHeader}>Exchange Spread Monitor</Text>
-              <Text style={styles.monoLabel}>UPDATED: {lastUpdate || 'WAITING'}</Text>
+              <Text style={GlobalStyles.sectionHeader}>Exchange Monitor</Text>
+              <Text style={styles.monoLabel}>
+                {lastUpdate ? lastUpdate.toLocaleTimeString() : "WAITING"}
+              </Text>
             </View>
 
+            {/* Exchange selector */}
             <View style={styles.tableCard}>
               <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Exchange</Text>
+                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>
+                  Exchange
+                </Text>
                 <Text style={styles.tableHeaderCell}>Bid</Text>
                 <Text style={styles.tableHeaderCell}>Ask</Text>
                 <Text style={styles.tableHeaderCell}>Spread</Text>
               </View>
 
-              {Object.entries(marketData).length > 0 ? (
-                Object.entries(marketData).map(([exchange, data]) => {
-                  const bidVal = data.bid ? parseFloat(data.bid) : 0;
-                  const askVal = data.ask ? parseFloat(data.ask) : 0;
-                  const spreadVal = askVal - bidVal;
-                  const isSelected = selectedExchange === exchange;
+              {EXCHANGES.map((exchange) => {
+                const exData = marketData[exchange] || {};
+                const bidVal = exData.bid ? parseFloat(exData.bid) : 0;
+                const askVal = exData.ask ? parseFloat(exData.ask) : 0;
+                const spreadVal = askVal - bidVal;
+                const isSelected = selectedExchange === exchange;
 
-                  return (
-                    <Pressable 
-                      key={exchange} 
-                      onPress={() => handleSelectExchange(exchange)}
-                      style={[styles.tableRow, isSelected && styles.selectedRow]}
+                return (
+                  <Pressable
+                    key={exchange}
+                    onPress={() => handleSelectExchange(exchange)}
+                    style={[styles.tableRow, isSelected && styles.selectedRow]}
+                  >
+                    <View
+                      style={{
+                        flex: 1.5,
+                        flexDirection: "row",
+                        alignItems: "center",
+                      }}
                     >
-                      <View style={{ flex: 1.5, flexDirection: 'row', alignItems: 'center' }}>
-                        {isSelected && <View style={styles.rowSelectorDot} />}
-                        <Text style={[styles.exchangeName, isSelected && { color: accentColor }]}>
-                          {exchange}
+                      {isSelected && <View style={styles.rowSelectorDot} />}
+                      <Text
+                        style={[
+                          styles.exchangeName,
+                          isSelected && { color: accentColor },
+                        ]}
+                      >
+                        {exchange}
+                      </Text>
+                    </View>
+                    <Text style={styles.priceValText}>
+                      {bidVal > 0 ? bidVal.toFixed(1) : "---"}
+                    </Text>
+                    <Text style={[styles.priceValText, { color: "#f87171" }]}>
+                      {askVal > 0 ? askVal.toFixed(1) : "---"}
+                    </Text>
+                    <Text style={[styles.priceValText, { color: accentColor }]}>
+                      {spreadVal > 0 ? parseFloat(spreadVal.toFixed(4)) : "---"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Selected Exchange Fee Panel */}
+            {exchangeFees && exchangeFees[selectedExchange] && (
+              <View style={styles.feePanel}>
+                <Text style={styles.feeTitle}>{selectedExchange} Fee Matrix</Text>
+                <View style={styles.feeRow}>
+                  <Text style={styles.feeLabel}>Taker Fee:</Text>
+                  <Text style={styles.feeValue}>{(exchangeFees[selectedExchange].taker * 100).toFixed(2)}%</Text>
+                  <Text style={[styles.feeLabel, { marginLeft: 16 }]}>Withdrawal:</Text>
+                  <Text style={styles.feeValue}>{exchangeFees[selectedExchange].withdrawalBTC} BTC</Text>
+                </View>
+              </View>
+            )}
+
+            {/* 50-tick history */}
+            <View style={[styles.tableCard, { marginTop: 16 }]}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Time</Text>
+                <Text style={styles.tableHeaderCell}>Bid</Text>
+                <Text style={styles.tableHeaderCell}>Ask</Text>
+                <Text style={styles.tableHeaderCell}>Spread</Text>
+              </View>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {(marketHistory[selectedExchange ?? "Binance"] || [])
+                  .filter(
+                    (t) => t && t.bid != null && t.ask != null && t.ts != null,
+                  )
+                  .slice(-50)
+                  .reverse()
+                  .map((tick, i) => {
+                    if (!tick || !tick.ts) return null;
+                    const ts = new Date(tick.ts).toLocaleTimeString() || "--";
+                    return (
+                      <View key={`${tick.ts}-${i}`} style={styles.tableRow}>
+                        <Text style={[styles.priceValText, { flex: 1 }]}>
+                          {ts}
+                        </Text>
+                        <Text style={[styles.priceValText, {}]}>
+                          {(tick.bid ?? 0).toFixed(1)}
+                        </Text>
+                        <Text
+                          style={[styles.priceValText, { color: "#f87171" }]}
+                        >
+                          {(tick.ask ?? 0).toFixed(1)}
+                        </Text>
+                        <Text
+                          style={[styles.priceValText, { color: accentColor }]}
+                        >
+                          {parseFloat((tick.spread ?? 0).toFixed(4))}
                         </Text>
                       </View>
-                      <Text style={styles.priceValText}>
-                        {bidVal > 0 ? bidVal.toFixed(1) : '---'}
-                      </Text>
-                      <Text style={[styles.priceValText, { color: '#f87171' }]}>
-                        {askVal > 0 ? askVal.toFixed(1) : '---'}
-                      </Text>
-                      <Text style={[styles.priceValText, { color: accentColor }]}>
-                        {spreadVal > 0 ? spreadVal.toFixed(1) : '---'}
-                      </Text>
-                    </Pressable>
-                  );
-                })
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Orchestrating market channels...</Text>
-                </View>
-              )}
+                    );
+                  })}
+              </ScrollView>
             </View>
           </View>
-
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -334,8 +660,8 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   brandText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+    color: "#FFFFFF",
+    fontWeight: "800",
     fontSize: 20,
     letterSpacing: 2,
   },
@@ -346,8 +672,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: borderColor,
     paddingVertical: 6,
@@ -361,14 +687,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   statusText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 1,
   },
   statsBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     borderWidth: 1,
     borderColor: borderColor,
     backgroundColor: cardColor,
@@ -383,16 +709,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statMainVal: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 18,
     marginTop: 4,
   },
   layoutGrid: {
-    flexDirection: 'column',
+    flexDirection: "column",
   },
   layoutGridRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   leftColumn: {
     marginBottom: 24,
@@ -401,68 +727,76 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
     marginBottom: 12,
     paddingHorizontal: 4,
   },
   monoLabel: {
-    color: textSecondary,
+    color: "#34d399",
     fontSize: 9,
-    fontFamily: Platform.OS === 'web' ? 'monospace' : 'System',
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
     letterSpacing: 1.2,
   },
   chartCard: {
     backgroundColor: cardColor,
     borderWidth: 1,
     borderColor: borderColor,
-    padding: 16,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
+  },
+  chartPlaceholder: {
+    height: 320,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    color: textSecondary,
+    fontSize: 13,
   },
   tableCard: {
     backgroundColor: cardColor,
     borderWidth: 1,
     borderColor: borderColor,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   mobileChartPlaceholder: {
     minHeight: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   tableHeader: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: borderColor,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#0F0F11',
+    backgroundColor: "#0F0F11",
   },
   tableHeaderCell: {
     color: textSecondary,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     flex: 1,
-    textAlign: 'right',
+    textAlign: "right",
   },
   tableRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#161619',
-    alignItems: 'center',
+    borderBottomColor: "#161619",
+    alignItems: "center",
   },
   selectedRow: {
-    backgroundColor: '#161619',
+    backgroundColor: "#161619",
   },
   exchangeName: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: "#FFFFFF",
+    fontWeight: "600",
     fontSize: 14,
   },
   rowSelectorDot: {
@@ -473,20 +807,158 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   priceValText: {
-    color: '#34d399',
-    fontWeight: '600',
+    color: "#34d399",
+    fontWeight: "600",
     fontSize: 13,
     flex: 1,
-    textAlign: 'right',
-    fontFamily: Platform.OS === 'web' ? 'monospace' : 'System',
+    textAlign: "right",
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
   },
   emptyContainer: {
     padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyText: {
     color: textSecondary,
     fontSize: 13,
+  },
+  feedCard: {
+    backgroundColor: cardColor,
+    borderWidth: 1,
+    borderColor: borderColor,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginTop: 24,
+    padding: 16,
+  },
+  emptyFeed: {
+    height: 150,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: borderColor,
+    borderRadius: 4,
+  },
+  emptyFeedText: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
+  },
+  emptyFeedSubtext: {
+    color: "#475569",
+    fontSize: 10,
+    marginTop: 4,
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
+  },
+  alertItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#161619",
+    paddingVertical: 12,
+  },
+  alertHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  alertId: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
+  },
+  alertTime: {
+    color: "#475569",
+    fontSize: 10,
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
+  },
+  alertRouteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  routeBadgeBuy: {
+    backgroundColor: "rgba(52, 211, 153, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(52, 211, 153, 0.3)",
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 2,
+  },
+  routeBadgeSell: {
+    backgroundColor: "rgba(248, 113, 113, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(248, 113, 113, 0.3)",
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 2,
+  },
+  routeBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  routeArrow: {
+    color: "#64748b",
+    marginHorizontal: 8,
+    fontSize: 12,
+  },
+  alertDataRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  alertDataLabel: {
+    color: "#475569",
+    fontSize: 9,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  alertDataVal: {
+    color: "#e2e8f0",
+    fontSize: 11,
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
+  },
+  alertProfitText: {
+    color: "#34d399",
+    fontWeight: "700",
+  },
+  feePanel: {
+    backgroundColor: cardColor,
+    borderWidth: 1,
+    borderColor: borderColor,
+    borderRadius: 4,
+    padding: 16,
+    marginTop: 16,
+  },
+  feeTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  feeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  feeLabel: {
+    color: textSecondary,
+    fontSize: 11,
+    marginRight: 6,
+  },
+  feeValue: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+    fontFamily: Platform.OS === "web" ? "monospace" : "System",
   },
 });
