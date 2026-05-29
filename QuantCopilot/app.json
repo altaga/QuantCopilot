@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "QuantCopilot",
+    "slug": "quantcopilot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/logo.png",
+    "scheme": "quantcopilot",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./src/assets/logo.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./src/assets/logo.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./src/assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0A0A",
+          "android": {
+            "image": "./src/assets/logo.png",
+            "imageWidth": 76
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "95d4df23-a01e-4312-861b-a1ff6c3afbfa"
+      }
+    },
+    "owner": "altaga"
+  }
+}
