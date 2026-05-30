@@ -1,50 +1,70 @@
-'use strict';
+"use strict";
 
-const { calculateTruePrice }                                = require('./tools/oracle-engine');
-const { evaluate, resetDailyIfNeeded, DEFAULT_RULES }       = require('./tools/risk-engine');
-const { init: initSim, execute, getWallets, getTradeLog, getPnLSummary } = require('./tools/simulation-engine');
+const { calculateTruePrice } = require("./tools/oracle-engine");
+const {
+  evaluate,
+  resetDailyIfNeeded,
+  DEFAULT_RULES,
+  calculateRiskScore,
+} = require("./tools/risk-engine");
+const {
+  init: initSim,
+  execute,
+  getWallets,
+  getTradeLog,
+  getPnLSummary,
+} = require("./tools/simulation-engine");
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const TOPIC         = 'market/btc/ticker';
-const ALERTS_TOPIC  = 'ARBITRAGE_ALERTS';
-const AUDIT_TOPIC   = 'RISK_AUDIT';
-const TRADE_TOPIC   = 'TRADE_EXECUTED';
-const PNL_TOPIC     = 'PNL_UPDATE';
-const PUBLISH_HZ    = 10;
+const TOPIC = "market/btc/ticker";
+const ALERTS_TOPIC = "ARBITRAGE_ALERTS";
+const AUDIT_TOPIC = "RISK_AUDIT";
+const TRADE_TOPIC = "TRADE_EXECUTED";
+const PNL_TOPIC = "PNL_UPDATE";
+const PUBLISH_HZ = 10;
 const PUBLISH_INTERVAL_MS = Math.round(1000 / PUBLISH_HZ);
 
 const EXCHANGES = [
-    'binance', 'kraken', 'coinbase', 'okx', 'bitfinex',
-    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin', 'rektswap'
+  "binance",
+  "kraken",
+  "coinbase",
+  "okx",
+  "bitfinex",
+  "bybit",
+  "gateio",
+  "gemini",
+  "bitstamp",
+  "kucoin",
+  "rektswap",
 ];
 
 // Baseline slippage floor (USD)
-const EST_SLIPPAGE_USD = 2.50;
+const EST_SLIPPAGE_USD = 2.5;
 
 // ─── STATE & MEMORY ───────────────────────────────────────────────────────────
 const marketData = {
-    Binance:  { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Kraken:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Coinbase: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    OKX:      { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Bitfinex: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Bybit:    { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Gateio:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Gemini:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Bitstamp: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Kucoin:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    RektSwap: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 }
+  Binance: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Kraken: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Coinbase: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  OKX: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Bitfinex: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Bybit: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Gateio: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Gemini: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Bitstamp: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  Kucoin: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+  RektSwap: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
 };
 
 let globalExchangeFees = {};
-let redisClientRef     = null;
+let redisClientRef = null;
 
 let metricsHistory = {
-    opportunities: Array(20).fill(0),
-    profit: Array(20).fill(0),
-    trades: Array(20).fill(0),
-    riskSaved: Array(20).fill(0),
-    drawdown: Array(20).fill(0)
+  opportunities: Array(20).fill(0),
+  profit: Array(20).fill(0),
+  trades: Array(20).fill(0),
+  riskSaved: Array(20).fill(0),
+  drawdown: Array(20).fill(0),
 };
 let opportunitiesDetected = 0;
 
@@ -52,229 +72,303 @@ let opportunitiesDetected = 0;
 let activeRules = { ...DEFAULT_RULES };
 
 function setActiveRules(partial) {
-    activeRules = { ...activeRules, ...partial };
-    console.log('[ORCH] Active rules updated:', JSON.stringify(activeRules));
+  activeRules = { ...activeRules, ...partial };
+  console.log("[ORCH] Active rules updated:", JSON.stringify(activeRules));
 
-    if (activeRules.enableRektSwap === false) {
-        marketData.RektSwap = { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 };
-    }
+  if (activeRules.enableRektSwap === false) {
+    marketData.RektSwap = {
+      bid: 0,
+      bidVol: 0,
+      ask: 0,
+      askVol: 0,
+      timestamp: 0,
+    };
+  }
 
-    if (redisClientRef) {
-        redisClientRef.publish('ACTIVE_RULES', JSON.stringify(activeRules));
-    }
+  if (redisClientRef) {
+    redisClientRef.publish("ACTIVE_RULES", JSON.stringify(activeRules));
+  }
 }
 
 // ─── CORE FUNCTIONS ───────────────────────────────────────────────────────────
 
 function updateMemory(exchange, bidPrice, bidVol, askPrice, askVol) {
-    if (exchange === 'RektSwap' && activeRules.enableRektSwap === false) {
-        marketData.RektSwap = { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 };
-        return; // Completely ignore RektSwap when disabled by the UI
-    }
+  if (exchange === "RektSwap" && activeRules.enableRektSwap === false) {
+    marketData.RektSwap = {
+      bid: 0,
+      bidVol: 0,
+      ask: 0,
+      askVol: 0,
+      timestamp: 0,
+    };
+    return; // Completely ignore RektSwap when disabled by the UI
+  }
 
-    let updated = false;
+  let updated = false;
 
-    if (bidPrice !== null && bidPrice > 0) {
-        marketData[exchange].bid = bidPrice;
-        if (bidVol !== null) marketData[exchange].bidVol = bidVol;
-        updated = true;
-    }
+  if (bidPrice !== null && bidPrice > 0) {
+    marketData[exchange].bid = bidPrice;
+    if (bidVol !== null) marketData[exchange].bidVol = bidVol;
+    updated = true;
+  }
 
-    if (askPrice !== null && askPrice > 0) {
-        marketData[exchange].ask = askPrice;
-        if (askVol !== null) marketData[exchange].askVol = askVol;
-        updated = true;
-    }
+  if (askPrice !== null && askPrice > 0) {
+    marketData[exchange].ask = askPrice;
+    if (askVol !== null) marketData[exchange].askVol = askVol;
+    updated = true;
+  }
 
-    if (updated) {
-        marketData[exchange].timestamp = Date.now();
-        detectCrossExchangeArbitrage();
-    }
+  if (updated) {
+    marketData[exchange].timestamp = Date.now();
+    detectCrossExchangeArbitrage();
+  }
 }
 
 async function detectCrossExchangeArbitrage() {
-    if (!redisClientRef) return;
+  if (!redisClientRef) return;
 
-    resetDailyIfNeeded();
+  resetDailyIfNeeded();
 
-    const exchanges = Object.keys(marketData);
+  const exchanges = Object.keys(marketData);
 
-    for (let i = 0; i < exchanges.length; i++) {
-        for (let j = 0; j < exchanges.length; j++) {
-            if (i === j) continue;
+  for (let i = 0; i < exchanges.length; i++) {
+    for (let j = 0; j < exchanges.length; j++) {
+      if (i === j) continue;
 
-            const exchangeA = exchanges[i]; // Buy here (cheap)
-            const exchangeB = exchanges[j]; // Sell here (expensive)
+      const exchangeA = exchanges[i]; // Buy here (cheap)
+      const exchangeB = exchanges[j]; // Sell here (expensive)
 
-            const askA = marketData[exchangeA].ask;
-            const volA = marketData[exchangeA].askVol;
-            const bidB = marketData[exchangeB].bid;
-            const volB = marketData[exchangeB].bidVol;
+      const askA = marketData[exchangeA].ask;
+      const volA = marketData[exchangeA].askVol;
+      const bidB = marketData[exchangeB].bid;
+      const volB = marketData[exchangeB].bidVol;
 
-            if (!askA || !bidB || askA === 0 || bidB === 0) continue;
+      if (!askA || !bidB || askA === 0 || bidB === 0) continue;
 
-            // Quick filter: is there a raw price divergence?
-            if (askA < bidB) {
-                const feeA = globalExchangeFees[exchangeA]?.taker || 0.0020;
-                const feeB = globalExchangeFees[exchangeB]?.taker || 0.0020;
+      // Quick filter: is there a raw price divergence?
+      if (askA < bidB) {
+        const feeA = globalExchangeFees[exchangeA]?.taker || 0.002;
+        const feeB = globalExchangeFees[exchangeB]?.taker || 0.002;
 
-                const volumenEjecutable = Math.min(volA, volB);
-                if (volumenEjecutable === 0) continue;
+        const executableVolume = Math.min(volA, volB);
+        if (executableVolume === 0) continue;
 
-                // Net profitability calculation
-                const costoCompraReal    = askA * (1 + feeA);
-                const ingresoVentaReal   = bidB * (1 - feeB);
-                const profitNetoPorUnidad = ingresoVentaReal - costoCompraReal;
+        // Net profitability calculation
+        const realBuyCost = askA * (1 + feeA);
+        const realSellRevenue = bidB * (1 - feeB);
+        const netProfitPerUnit = realSellRevenue - realBuyCost;
 
-                // Dynamic slippage (size-aware floor)
-                const dynamicSlippageUSD = Math.max(EST_SLIPPAGE_USD, (askA * volumenEjecutable) * 0.0001);
+        // Dynamic slippage (size-aware floor)
+        const dynamicSlippageUSD = Math.max(
+          EST_SLIPPAGE_USD,
+          askA * executableVolume * 0.0001,
+        );
 
-                const gananciaNetaTotalUSD = (profitNetoPorUnidad * volumenEjecutable) - dynamicSlippageUSD;
+        const netProfitTotalUSD =
+          netProfitPerUnit * executableVolume - dynamicSlippageUSD;
 
-                if (gananciaNetaTotalUSD > 0) {
-                    opportunitiesDetected++;
-                    const oportunidad = {
-                        id:           `ARB-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-                        compraEn:     exchangeA,
-                        vendeEn:      exchangeB,
-                        precioCompra: askA,
-                        precioVenta:  bidB,
-                        volumen:      volumenEjecutable,
-                        profitTotalUSD: parseFloat(gananciaNetaTotalUSD.toFixed(4)),
-                        timestamp:    Date.now()
-                    };
+        if (netProfitTotalUSD > 0) {
+          opportunitiesDetected++;
+          const opportunity = {
+            id: `ARB-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            buyExchange: exchangeA,
+            sellExchange: exchangeB,
+            buyPrice: askA,
+            sellPrice: bidB,
+            volume: executableVolume,
+            profitUSD: parseFloat(netProfitTotalUSD.toFixed(4)),
+            // Legacy aliases for backward compatibility (Spanish systems)
+            compraEn: exchangeA,
+            vendeEn: exchangeB,
+            precioCompra: askA,
+            precioVenta: bidB,
+            volumen: executableVolume,
+            profitTotalUSD: parseFloat(netProfitTotalUSD.toFixed(4)),
+            timestamp: Date.now(),
+          };
 
-                    // ── Risk Engine Gate ──────────────────────────────────────
-                    const verdict = evaluate(oportunidad, activeRules, marketData);
+          // ── Risk Engine Gate ──────────────────────────────────────
+          const verdict = evaluate(opportunity, activeRules, marketData);
 
-                    if (!verdict.approved) {
-                        redisClientRef.publish(AUDIT_TOPIC, JSON.stringify({
-                            id:        oportunidad.id,
-                            blocked:   true,
-                            reason:    verdict.reason,
-                            detail:    verdict.detail,
-                            compraEn:  exchangeA,
-                            vendeEn:   exchangeB,
-                            profit:    gananciaNetaTotalUSD.toFixed(4),
-                            timestamp: Date.now()
-                        }));
-                        continue; // Do not simulate or publish alert
-                    }
+          if (!verdict.approved) {
+            redisClientRef.publish(
+              AUDIT_TOPIC,
+              JSON.stringify({
+                id: opportunity.id,
+                blocked: true,
+                reason: verdict.reason,
+                detail: verdict.detail,
+                compraEn: exchangeA,
+                vendeEn: exchangeB,
+                profit: netProfitTotalUSD.toFixed(4),
+                timestamp: Date.now(),
+              }),
+            );
+            continue; // Do not simulate or publish alert
+          }
 
-                    // ── Approved: simulate execution ──────────────────────────
-                    const tradeResult = await execute(oportunidad, activeRules);
+          // ── Approved: simulate execution ──────────────────────────
+          const tradeResult = await execute(opportunity, activeRules);
 
-                    redisClientRef.publish(ALERTS_TOPIC, JSON.stringify({
-                        ...oportunidad,
-                        status: tradeResult.status
-                    }));
+          // ── Calculate real risk score for display ───────────────────
+          opportunity.riskScore = calculateRiskScore(
+            opportunity,
+            activeRules,
+            marketData,
+          );
 
-                    redisClientRef.publish(TRADE_TOPIC, JSON.stringify(tradeResult));
-                    redisClientRef.publish(PNL_TOPIC,   JSON.stringify(getPnLSummary()));
-                }
-            }
+          // Publish alert with real riskScore
+          redisClientRef.publish(
+            ALERTS_TOPIC,
+            JSON.stringify({
+              ...opportunity,
+              status: tradeResult.status,
+            }),
+          );
+
+          redisClientRef.publish(TRADE_TOPIC, JSON.stringify(tradeResult));
+          redisClientRef.publish(PNL_TOPIC, JSON.stringify(getPnLSummary()));
         }
+      }
     }
+  }
 }
 
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
 async function start(redisPub) {
-    console.log('🚀 [CCM] Inicializando Orquestador HFT...');
-    redisClientRef = redisPub;
+  console.log("🚀 [CCM] Starting HFT Orchestrator...");
+  redisClientRef = redisPub;
 
-    // Initialize simulation engine with Redis persistence
-    await initSim(redisPub);
+  // Initialize simulation engine with Redis persistence
+  await initSim(redisPub);
 
-    const modules = EXCHANGES.map(name => ({ name, mod: require(`./ws_modules/${name}`) }));
+  const modules = EXCHANGES.map((name) => ({
+    name,
+    mod: require(`./ws_modules/${name}`),
+  }));
 
-    async function connectModule(name, mod) {
-        if (typeof mod.getFees === 'function') {
-            const exchangeKey = name.charAt(0).toUpperCase() + name.slice(1);
-            globalExchangeFees[exchangeKey] = mod.getFees();
-        }
-
-        if (typeof mod.load === 'function') {
-            try {
-                await mod.load();
-            } catch (err) {
-                console.error(`❌ [${name.toUpperCase()}] Error en Pre-flight:`, err.message);
-                setTimeout(() => connectModule(name, mod), 5000);
-                return;
-            }
-        }
-
-        let ws;
-        try {
-            ws = mod.connect(updateMemory);
-        } catch (err) {
-            console.error(`❌ [${name.toUpperCase()}] Error crítico al conectar:`, err.message);
-            return;
-        }
-
-        if (!ws) return;
-
-        ws.on('close', () => {
-            console.warn(`⚠️ [${name.toUpperCase()}] Desconectado. Reconectando en 5s...`);
-            setTimeout(() => connectModule(name, mod), 5000);
-        });
+  async function connectModule(name, mod) {
+    if (typeof mod.getFees === "function") {
+      const exchangeKey = name.charAt(0).toUpperCase() + name.slice(1);
+      globalExchangeFees[exchangeKey] = mod.getFees();
     }
 
-    await Promise.all(modules.map(({ name, mod }) => connectModule(name, mod)));
+    if (typeof mod.load === "function") {
+      try {
+        await mod.load();
+      } catch (err) {
+        console.error(
+          `❌ [${name.toUpperCase()}] Error en Pre-flight:`,
+          err.message,
+        );
+        setTimeout(() => connectModule(name, mod), 5000);
+        return;
+      }
+    }
 
-    console.log(`✅ [CCM] Conexiones y Fees establecidos. Publicando ticks en "${TOPIC}" a ${PUBLISH_HZ} Hz.\n`);
-    console.log(`🛡️  [RISK] Motor de Riesgo activo | Reglas: ${JSON.stringify(activeRules)}`);
+    let ws;
+    try {
+      ws = mod.connect(updateMemory);
+    } catch (err) {
+      console.error(
+        `❌ [${name.toUpperCase()}] Error crítico al conectar:`,
+        err.message,
+      );
+      return;
+    }
 
-    // ── HFT TICK PUBLISH LOOP ───────────────────────────────────────────────
-    setInterval(() => {
-        const frontEndData = {};
-        for (const [exchange, data] of Object.entries(marketData)) {
-            frontEndData[exchange] = { bid: data.bid, ask: data.ask };
-        }
+    if (!ws) return;
 
-        const truePrice = calculateTruePrice(marketData);
+    ws.on("close", () => {
+      console.warn(
+        `⚠️ [${name.toUpperCase()}] Desconectado. Reconectando en 5s...`,
+      );
+      setTimeout(() => connectModule(name, mod), 5000);
+    });
+  }
 
-        const msg = {
-            sender:   'ccm-orchestrator',
-            ts:       Date.now(),
-            data:     frontEndData,
-            truePrice: truePrice ? parseFloat(truePrice.toFixed(2)) : null
-        };
+  await Promise.all(modules.map(({ name, mod }) => connectModule(name, mod)));
 
-        redisPub.publish(TOPIC, JSON.stringify(msg));
-    }, PUBLISH_INTERVAL_MS);
+  console.log(
+    `✅ [CCM] Conexiones y Fees establecidos. Publicando ticks en "${TOPIC}" a ${PUBLISH_HZ} Hz.\n`,
+  );
+  console.log(
+    `🛡️  [RISK] Motor de Riesgo activo | Reglas: ${JSON.stringify(activeRules)}`,
+  );
 
-    // ── PERIODIC PNL & RULES BROADCAST (every 2s) ────────────────────────
-    // Ensures the dashboard always has fresh metrics, even when no trades execute
-    setInterval(() => {
-        const pnl = getPnLSummary();
-        
-        metricsHistory.profit = [...metricsHistory.profit, pnl.dailyPnL || 0].slice(-20);
-        metricsHistory.trades = [...metricsHistory.trades, pnl.totalTrades || 0].slice(-20);
-        metricsHistory.riskSaved = [...metricsHistory.riskSaved, pnl.totalRiskSavedUSD || 0].slice(-20);
-        metricsHistory.drawdown = [...metricsHistory.drawdown, (pnl.dailyPnL || 0) < 0 ? pnl.dailyPnL : 0].slice(-20);
-        metricsHistory.opportunities = [...metricsHistory.opportunities, opportunitiesDetected].slice(-20);
-        
-        const payload = { ...pnl, history: metricsHistory };
+  // ── HFT TICK PUBLISH LOOP ───────────────────────────────────────────────
+  setInterval(() => {
+    const frontEndData = {};
+    for (const [exchange, data] of Object.entries(marketData)) {
+      frontEndData[exchange] = { bid: data.bid, ask: data.ask };
+    }
 
-        redisPub.publish(PNL_TOPIC, JSON.stringify(payload));
-        redisPub.publish('ACTIVE_RULES', JSON.stringify(activeRules));
-    }, 2000);
+    const truePrice = calculateTruePrice(marketData);
+
+    const msg = {
+      sender: "ccm-orchestrator",
+      ts: Date.now(),
+      data: frontEndData,
+      truePrice: truePrice ? parseFloat(truePrice.toFixed(2)) : null,
+    };
+
+    redisPub.publish(TOPIC, JSON.stringify(msg));
+  }, PUBLISH_INTERVAL_MS);
+
+  // ── PERIODIC PNL & RULES BROADCAST (every 2s) ────────────────────────
+  // Ensures the dashboard always has fresh metrics, even when no trades execute
+  setInterval(() => {
+    const pnl = getPnLSummary();
+
+    metricsHistory.profit = [...metricsHistory.profit, pnl.dailyPnL || 0].slice(
+      -20,
+    );
+    metricsHistory.trades = [
+      ...metricsHistory.trades,
+      pnl.totalTrades || 0,
+    ].slice(-20);
+    metricsHistory.riskSaved = [
+      ...metricsHistory.riskSaved,
+      pnl.totalRiskSavedUSD || 0,
+    ].slice(-20);
+    metricsHistory.drawdown = [
+      ...metricsHistory.drawdown,
+      (pnl.dailyPnL || 0) < 0 ? pnl.dailyPnL : 0,
+    ].slice(-20);
+    metricsHistory.opportunities = [
+      ...metricsHistory.opportunities,
+      opportunitiesDetected,
+    ].slice(-20);
+
+    const payload = { ...pnl, history: metricsHistory };
+
+    redisPub.publish(PNL_TOPIC, JSON.stringify(payload));
+    redisPub.publish("ACTIVE_RULES", JSON.stringify(activeRules));
+  }, 2000);
 }
 
-function getExchangeFees()  { return globalExchangeFees; }
-function getActiveRules()   { return { ...activeRules }; }
-function getMarketData()    { return marketData; }
-function getFullPnL()       { return { ...getPnLSummary(), history: metricsHistory }; }
+function getExchangeFees() {
+  return globalExchangeFees;
+}
+function getActiveRules() {
+  return { ...activeRules };
+}
+function getMarketData() {
+  return marketData;
+}
+function getFullPnL() {
+  return { ...getPnLSummary(), history: metricsHistory };
+}
 
 module.exports = {
-    start,
-    updateMemory,
-    getExchangeFees,
-    setActiveRules,
-    getActiveRules,
-    getWallets,
-    getTradeLog,
-    getPnLSummary,
-    getFullPnL,
-    getMarketData
+  start,
+  updateMemory,
+  getExchangeFees,
+  setActiveRules,
+  getActiveRules,
+  getWallets,
+  getTradeLog,
+  getPnLSummary,
+  getFullPnL,
+  getMarketData,
 };

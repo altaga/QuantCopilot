@@ -1,37 +1,73 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Platform, ScrollView, Dimensions, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Platform,
+  ScrollView,
+  Dimensions,
+  Image,
+} from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
-import { 
-  Activity, ArrowRight, Home, Compass, Cpu, Briefcase, BarChart2, 
-  LineChart, Bell, FileText, Settings, ShieldAlert, Zap
+import {
+  Activity,
+  ArrowRight,
+  Home,
+  Compass,
+  Cpu,
+  Briefcase,
+  BarChart2,
+  LineChart,
+  Bell,
+  FileText,
+  Settings,
+  ShieldAlert,
+  Zap,
 } from "lucide-react-native";
-import { 
-  createGlobalStyles, backgroundColor, cardColor, elevatedColor,
-  borderColor, textPrimary, textSecondary, textMuted,
-  accentColor, whiteColor, successColor, dangerColor, borderLight,
-  infoColor, warningColor
+import {
+  createGlobalStyles,
+  backgroundColor,
+  cardColor,
+  elevatedColor,
+  borderColor,
+  textPrimary,
+  textSecondary,
+  textMuted,
+  accentColor,
+  whiteColor,
+  successColor,
+  dangerColor,
+  borderLight,
+  infoColor,
+  warningColor,
 } from "../../core/styles";
 import { createMqttClient } from "../../utilsApp/mqttClient";
 import { getMqttToken } from "../../utilsApp/tokenGenerator";
 
-const BROKER_URL = process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
-const BROKER_HTTP_URL = BROKER_URL.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+const BROKER_URL =
+  process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
+const BROKER_HTTP_URL = BROKER_URL.replace(/^wss:\/\//, "https://").replace(
+  /^ws:\/\//,
+  "http://",
+);
 
 // Helper to draw smooth sparkline curves
 const generateSmoothSparkline = (data, width = 100, height = 35) => {
-  if (!data || data.length < 2) return `M0,${height/2} L${width},${height/2}`;
-  
+  if (!data || data.length < 2)
+    return `M0,${height / 2} L${width},${height / 2}`;
+
   const max = Math.max(...data);
   const min = Math.min(...data);
-  const range = max - min === 0 ? 1 : max - min; 
-  
+  const range = max - min === 0 ? 1 : max - min;
+
   const points = data.map((val, idx) => {
     const x = (idx / (data.length - 1)) * width;
-    const y = height - (((val - min) / range) * (height - 10)) - 5;
-    return {x, y};
+    const y = height - ((val - min) / range) * (height - 10) - 5;
+    return { x, y };
   });
-  
+
   let d = `M${points[0].x},${points[0].y}`;
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i];
@@ -45,19 +81,22 @@ const generateSmoothSparkline = (data, width = 100, height = 35) => {
 // Helper for the main PnL chart with fill
 const generateFilledChart = (data, width = 300, height = 120) => {
   if (!data || data.length < 2) {
-    return { line: `M0,${height/2} L${width},${height/2}`, fill: `M0,${height} L0,${height/2} L${width},${height/2} L${width},${height} Z` };
+    return {
+      line: `M0,${height / 2} L${width},${height / 2}`,
+      fill: `M0,${height} L0,${height / 2} L${width},${height / 2} L${width},${height} Z`,
+    };
   }
-  
-  const max = Math.max(...data, 1500); 
+
+  const max = Math.max(...data, 1500);
   const min = Math.min(...data, -500);
-  const range = max - min === 0 ? 1 : max - min; 
-  
+  const range = max - min === 0 ? 1 : max - min;
+
   const points = data.map((val, idx) => {
     const x = (idx / (data.length - 1)) * width;
-    const y = height - (((val - min) / range) * height);
-    return {x, y};
+    const y = height - ((val - min) / range) * height;
+    return { x, y };
   });
-  
+
   let d = `M${points[0].x},${points[0].y}`;
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i];
@@ -65,7 +104,7 @@ const generateFilledChart = (data, width = 300, height = 120) => {
     const cp1x = (p0.x + p1.x) / 2;
     d += ` C${cp1x},${p0.y} ${cp1x},${p1.y} ${p1.x},${p1.y}`;
   }
-  
+
   const fill = `${d} L${width},${height} L0,${height} Z`;
   return { line: d, fill };
 };
@@ -73,16 +112,24 @@ const generateFilledChart = (data, width = 300, height = 120) => {
 export default function MainHub() {
   const router = useRouter();
   const GlobalStyles = createGlobalStyles();
-  
+
   const [token, setToken] = useState(null);
   const [activeMqttClient, setActiveMqttClient] = useState(null);
-  
+
   // Dashboard Live Data
-  const [pnl, setPnl] = useState({ totalNetUSD: 0, dailyPnL: 0, totalTrades: 0, winRatePercent: 0, totalBalanceUSD: 12540.32, blockedTradesCount: 0, totalRiskSavedUSD: 0 });
+  const [pnl, setPnl] = useState({
+    totalNetUSD: 0,
+    dailyPnL: 0,
+    totalTrades: 0,
+    winRatePercent: 0,
+    totalBalanceUSD: 12540.32,
+    blockedTradesCount: 0,
+    totalRiskSavedUSD: 0,
+  });
   const [activeRules, setActiveRules] = useState({});
   const [alerts, setAlerts] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
-  
+
   const [serverTime, setServerTime] = useState(new Date().toUTCString());
 
   // Clock
@@ -119,9 +166,12 @@ export default function MainHub() {
 
   useEffect(() => {
     if (!token) return;
-    
-    const client = createMqttClient(BROKER_URL, { username: "ccm_id", password: token });
-    
+
+    const client = createMqttClient(BROKER_URL, {
+      username: "ccm_id",
+      password: token,
+    });
+
     client.on("connect", () => {
       setActiveMqttClient(client);
       client.subscribe("PNL_UPDATE");
@@ -138,14 +188,14 @@ export default function MainHub() {
         }
         if (topic === "ACTIVE_RULES") setActiveRules(data);
         if (topic === "ARBITRAGE_ALERTS") {
-          setAlerts(prev => {
-            if (prev.some(a => a.id === data.id)) return prev;
+          setAlerts((prev) => {
+            if (prev.some((a) => a.id === data.id)) return prev;
             return [data, ...prev].slice(0, 10); // Keep top 10 on dashboard
           });
         }
         if (topic === "RISK_AUDIT") {
-          setAuditLog(prev => {
-            if (prev.some(a => a.id === data.id)) return prev;
+          setAuditLog((prev) => {
+            if (prev.some((a) => a.id === data.id)) return prev;
             return [data, ...prev].slice(0, 50);
           });
         }
@@ -157,7 +207,12 @@ export default function MainHub() {
 
   // Calculations for cards
   const totalOpportunities = (pnl.totalTrades || 0) + alerts.length;
-  const riskSaved = (pnl.totalRiskSavedUSD || 0) + auditLog.reduce((acc, log) => acc + (parseFloat(log.profitTotalUSD) || 0), 0);
+  const riskSaved =
+    (pnl.totalRiskSavedUSD || 0) +
+    auditLog.reduce(
+      (acc, log) => acc + (parseFloat(log.profitTotalUSD) || 0),
+      0,
+    );
   return (
     <View style={styles.layout}>
       {/* ─── MAIN CONTENT ─── */}
@@ -165,63 +220,155 @@ export default function MainHub() {
         {/* TOP NAVBAR */}
         <View style={styles.topNav}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginRight: 32 }}>
-              <Image 
-                source={require("../../assets/logoBN.png")} 
-                style={{ 
-                  width: 60, height: 60, borderRadius: 12, 
-                  marginRight: 16, marginTop: 0 
-                }} 
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginRight: 32,
+              }}
+            >
+              <Image
+                source={require("../../assets/logoBN.png")}
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 12,
+                  marginRight: 16,
+                  marginTop: 0,
+                }}
                 resizeMode="contain"
               />
               <View style={{ justifyContent: "center" }}>
-                <Text style={[styles.brandText, { fontSize: 24, color: whiteColor, fontWeight: "700", letterSpacing: -0.2, marginBottom: 2, lineHeight: 28 }]}>
+                <Text
+                  style={[
+                    styles.brandText,
+                    {
+                      fontSize: 24,
+                      color: whiteColor,
+                      fontWeight: "700",
+                      letterSpacing: -0.2,
+                      marginBottom: 2,
+                      lineHeight: 28,
+                    },
+                  ]}
+                >
                   QuantCopilot
                 </Text>
-                <Text style={[styles.subBrandText, { fontSize: 13, color: "#A1A1AA", letterSpacing: 0, textTransform: "none", lineHeight: 18 }]}>
+                <Text
+                  style={[
+                    styles.subBrandText,
+                    {
+                      fontSize: 13,
+                      color: "#A1A1AA",
+                      letterSpacing: 0,
+                      textTransform: "none",
+                      lineHeight: 18,
+                    },
+                  ]}
+                >
                   AI Risk Copilot for{"\n"}Autonomous Arbitrage
                 </Text>
               </View>
             </View>
-            
-            <View style={{ width: 1, height: 32, backgroundColor: borderColor, marginRight: 24 }} />
+
+            <View
+              style={{
+                width: 1,
+                height: 32,
+                backgroundColor: borderColor,
+                marginRight: 24,
+              }}
+            />
 
             <Text style={styles.pageTitle}>Live Dashboard</Text>
             <View style={styles.liveBadge}>
               <Text style={styles.liveBadgeText}>LIVE</Text>
             </View>
           </View>
-          
+
           <View style={[styles.navStatsGroup, { alignItems: "center" }]}>
-            
             {/* Connected Exchanges */}
-            <View style={{ flexDirection: "row", alignItems: "center", marginRight: 16 }}>
-              <Text style={{ color: textSecondary, fontSize: 11, marginRight: 12, fontWeight: "500" }}>Connected Exchanges</Text>
-              
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginRight: 16,
+              }}
+            >
+              <Text
+                style={{
+                  color: textSecondary,
+                  fontSize: 11,
+                  marginRight: 12,
+                  fontWeight: "500",
+                }}
+              >
+                Connected Exchanges
+              </Text>
+
               <View style={{ flexDirection: "row", gap: 6 }}>
-                <Image source={require("../../assets/exchanges/binance.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/okx.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/bybit.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/kraken.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/coinbase.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/bitfinex.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/gateio.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/gemini.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/bitstamp.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
-                <Image source={require("../../assets/exchanges/kucoin.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image
+                  source={require("../../assets/exchanges/binance.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/okx.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/bybit.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/kraken.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/coinbase.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/bitfinex.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/gateio.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/gemini.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/bitstamp.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
+                <Image
+                  source={require("../../assets/exchanges/kucoin.png")}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                />
               </View>
             </View>
 
             <View style={styles.navStat}>
               <Text style={styles.navStatLabel}>System</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  marginTop: 2,
+                }}
+              >
                 <View style={[styles.statusDot, { marginRight: 6 }]} />
                 <Text style={styles.statusTextActive}>Operational</Text>
               </View>
             </View>
             <View style={styles.navStat}>
               <Text style={styles.navStatLabel}>Latency</Text>
-              <Text style={[styles.navStatValue, { color: successColor }]}>78 ms</Text>
+              <Text style={[styles.navStatValue, { color: successColor }]}>
+                78 ms
+              </Text>
             </View>
             <View style={styles.navStat}>
               <Text style={styles.navStatLabel}>Server Time</Text>
@@ -230,39 +377,88 @@ export default function MainHub() {
             <View style={styles.navStat}>
               <Text style={styles.navStatLabel}>Account Balance</Text>
               <Text style={[styles.navStatValue, { color: whiteColor }]}>
-                {pnl.totalBalanceUSD !== undefined ? pnl.totalBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "12,540.32"} USDT
+                {pnl.totalBalanceUSD !== undefined
+                  ? pnl.totalBalanceUSD.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : "12,540.32"}{" "}
+                USDT
               </Text>
             </View>
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {/* METRIC CARDS ROW */}
           <View style={styles.metricsRow}>
             <View style={styles.metricCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.metricLabel}>Total Opportunities</Text>
                 <Text style={styles.metricValue}>{totalOpportunities}</Text>
-                <Text style={styles.metricChange}>+{alerts.length} vs last min</Text>
+                <Text style={styles.metricChange}>
+                  +{alerts.length} vs last min
+                </Text>
               </View>
-              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 70,
+                  height: 35,
+                  marginLeft: 12,
+                  marginBottom: 4,
+                }}
+              >
                 <Svg width="100%" height="100%" viewBox="0 0 100 35">
-                  <Path d={generateSmoothSparkline(pnl.history?.opportunities)} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path
+                    d={generateSmoothSparkline(pnl.history?.opportunities)}
+                    fill="none"
+                    stroke="#8b5cf6"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </Svg>
               </View>
             </View>
             <View style={styles.metricCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.metricLabel}>Est. Net Profit (24h)</Text>
-                <Text style={[styles.metricValue, { color: (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor }]}>
-                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}{(pnl.dailyPnL || 0).toFixed(2)} USDT
+                <Text
+                  style={[
+                    styles.metricValue,
+                    {
+                      color:
+                        (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor,
+                    },
+                  ]}
+                >
+                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}
+                  {(pnl.dailyPnL || 0).toFixed(2)} USDT
                 </Text>
-                <Text style={styles.metricChange}>{(pnl.winRatePercent || 0).toFixed(1)}% Win Rate</Text>
+                <Text style={styles.metricChange}>
+                  {(pnl.winRatePercent || 0).toFixed(1)}% Win Rate
+                </Text>
               </View>
-              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 70,
+                  height: 35,
+                  marginLeft: 12,
+                  marginBottom: 4,
+                }}
+              >
                 <Svg width="100%" height="100%" viewBox="0 0 100 35">
-                  <Path d={generateSmoothSparkline(pnl.history?.profit)} fill="none" stroke={successColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path
+                    d={generateSmoothSparkline(pnl.history?.profit)}
+                    fill="none"
+                    stroke={successColor}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </Svg>
               </View>
             </View>
@@ -270,23 +466,57 @@ export default function MainHub() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.metricLabel}>Trades Executed (24h)</Text>
                 <Text style={styles.metricValue}>{pnl.totalTrades || 0}</Text>
-                <Text style={[styles.metricChange, { color: infoColor }]}>Success Rate {pnl.winRatePercent?.toFixed(1) || 0}%</Text>
+                <Text style={[styles.metricChange, { color: infoColor }]}>
+                  Success Rate {pnl.winRatePercent?.toFixed(1) || 0}%
+                </Text>
               </View>
-              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 70,
+                  height: 35,
+                  marginLeft: 12,
+                  marginBottom: 4,
+                }}
+              >
                 <Svg width="100%" height="100%" viewBox="0 0 100 35">
-                  <Path d={generateSmoothSparkline(pnl.history?.trades)} fill="none" stroke={infoColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path
+                    d={generateSmoothSparkline(pnl.history?.trades)}
+                    fill="none"
+                    stroke={infoColor}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </Svg>
               </View>
             </View>
             <View style={styles.metricCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.metricLabel}>Risk Saved (24h)</Text>
-                <Text style={styles.metricValue}>{(pnl.totalRiskSavedUSD || 0).toFixed(2)} USDT</Text>
-                <Text style={[styles.metricChange, { color: dangerColor }]}>Blocked {pnl.blockedTradesCount || 0} trades</Text>
+                <Text style={styles.metricValue}>
+                  {(pnl.totalRiskSavedUSD || 0).toFixed(2)} USDT
+                </Text>
+                <Text style={[styles.metricChange, { color: dangerColor }]}>
+                  Blocked {pnl.blockedTradesCount || 0} trades
+                </Text>
               </View>
-              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 70,
+                  height: 35,
+                  marginLeft: 12,
+                  marginBottom: 4,
+                }}
+              >
                 <Svg width="100%" height="100%" viewBox="0 0 100 35">
-                  <Path d={generateSmoothSparkline(pnl.history?.riskSaved)} fill="none" stroke={warningColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path
+                    d={generateSmoothSparkline(pnl.history?.riskSaved)}
+                    fill="none"
+                    stroke={warningColor}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </Svg>
               </View>
             </View>
@@ -294,15 +524,32 @@ export default function MainHub() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.metricLabel}>Max Drawdown (30d)</Text>
                 <Text style={[styles.metricValue, { color: dangerColor }]}>
-                  {(pnl.dailyPnL || 0) < 0 ? (pnl.dailyPnL || 0).toFixed(2) : "0.00"} USDT
+                  {(pnl.dailyPnL || 0) < 0
+                    ? (pnl.dailyPnL || 0).toFixed(2)
+                    : "0.00"}{" "}
+                  USDT
                 </Text>
                 <Text style={[styles.metricChange, { color: warningColor }]}>
                   Limit: {activeRules?.maxDailyLossUSD || -200} USDT
                 </Text>
               </View>
-              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 70,
+                  height: 35,
+                  marginLeft: 12,
+                  marginBottom: 4,
+                }}
+              >
                 <Svg width="100%" height="100%" viewBox="0 0 100 35">
-                  <Path d={generateSmoothSparkline(pnl.history?.drawdown)} fill="none" stroke="#a855f7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <Path
+                    d={generateSmoothSparkline(pnl.history?.drawdown)}
+                    fill="none"
+                    stroke="#a855f7"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </Svg>
               </View>
             </View>
@@ -314,7 +561,9 @@ export default function MainHub() {
             <View style={styles.tableCard}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Live Opportunities</Text>
-                <View style={styles.badgeCount}><Text style={styles.badgeCountText}>{alerts.length}</Text></View>
+                <View style={styles.badgeCount}>
+                  <Text style={styles.badgeCountText}>{alerts.length}</Text>
+                </View>
               </View>
 
               <View style={styles.tableHeaderRow}>
@@ -323,20 +572,47 @@ export default function MainHub() {
                 <Text style={[styles.tableHeader, { flex: 2 }]}>Sell (Ex)</Text>
                 <Text style={[styles.tableHeader, { flex: 1.5 }]}>Spread</Text>
                 <Text style={[styles.tableHeader, { flex: 1.5 }]}>Net %</Text>
-                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Risk Score</Text>
-                <Text style={[styles.tableHeader, { flex: 1, textAlign: "right" }]}>Action</Text>
+                <Text style={[styles.tableHeader, { flex: 1.5 }]}>
+                  Risk Score
+                </Text>
+                <Text
+                  style={[styles.tableHeader, { flex: 1, textAlign: "right" }]}
+                >
+                  Action
+                </Text>
               </View>
 
               {/* FAKE/STATIC ENTRY TO PROVE BTC/USD LINK WORKS */}
               <View style={styles.tableRow}>
-                <View style={{ flex: 2 }}><Text style={styles.tableCellBold}>BTC/USD</Text></View>
-                <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>Binance</Text></View>
-                <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>RektSwap</Text></View>
-                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.50%</Text></View>
-                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.38%</Text></View>
-                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: warningColor }]}>72/100</Text></View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellBold}>BTC/USD</Text>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellMuted}>Binance</Text>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellMuted}>RektSwap</Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: successColor }]}>
+                    0.50%
+                  </Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: successColor }]}>
+                    0.38%
+                  </Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: warningColor }]}>
+                    {alert.riskScore || 50}/100
+                  </Text>
+                </View>
                 <View style={{ flex: 1, alignItems: "flex-end" }}>
-                  <Pressable style={styles.actionBtn} onPress={() => router.push("/(screens)/btcusd")}>
+                  <Pressable
+                    style={styles.actionBtn}
+                    onPress={() => router.push("/(screens)/btcusd")}
+                  >
                     <Text style={styles.actionBtnText}>View</Text>
                   </Pressable>
                 </View>
@@ -344,18 +620,47 @@ export default function MainHub() {
 
               {alerts.map((alert, idx) => (
                 <View key={idx} style={styles.tableRow}>
-                  <View style={{ flex: 2 }}><Text style={styles.tableCellBold}>BTC/USD</Text></View>
-                  <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>{alert.compraEn}</Text></View>
-                  <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>{alert.vendeEn}</Text></View>
-                  <View style={{ flex: 1.5 }}>
-                    <Text style={[styles.tableCell, { color: successColor }]}>
-                      {alert.precioCompra > 0 ? (((alert.precioVenta - alert.precioCompra)/alert.precioCompra)*100).toFixed(2) : "0"}%
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.tableCellBold}>BTC/USD</Text>
+                  </View>
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.tableCellMuted}>
+                      {alert.compraEn || alert.buyExchange}
                     </Text>
                   </View>
-                  <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.30%</Text></View>
-                  <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: warningColor }]}>60/100</Text></View>
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.tableCellMuted}>
+                      {alert.vendeEn || alert.sellExchange}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1.5 }}>
+                    <Text style={[styles.tableCell, { color: successColor }]}>
+                      {(alert.precioCompra || alert.buyPrice) > 0
+                        ? (
+                            (((alert.precioVenta || alert.sellPrice) -
+                              (alert.precioCompra || alert.buyPrice)) /
+                              (alert.precioCompra || alert.buyPrice)) *
+                            100
+                          ).toFixed(2)
+                        : "0"}
+                      %
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1.5 }}>
+                    <Text style={[styles.tableCell, { color: successColor }]}>
+                      0.30%
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1.5 }}>
+                    <Text style={[styles.tableCell, { color: warningColor }]}>
+                      {alert.riskScore || 50}/100
+                    </Text>
+                  </View>
                   <View style={{ flex: 1, alignItems: "flex-end" }}>
-                    <Pressable style={styles.actionBtn} onPress={() => router.push("/(screens)/btcusd")}>
+                    <Pressable
+                      style={styles.actionBtn}
+                      onPress={() => router.push("/(screens)/btcusd")}
+                    >
                       <Text style={styles.actionBtnText}>View</Text>
                     </Pressable>
                   </View>
@@ -367,57 +672,204 @@ export default function MainHub() {
             <View style={styles.chartsColumn}>
               <View style={[styles.tableCard, { flex: 1, marginBottom: 16 }]}>
                 <Text style={styles.cardTitle}>PnL Overview (24h)</Text>
-                <Text style={[styles.metricValue, { fontSize: 24, color: (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor, marginVertical: 8 }]}>
-                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}{(pnl.dailyPnL || 0).toFixed(2)} USDT
+                <Text
+                  style={[
+                    styles.metricValue,
+                    {
+                      fontSize: 24,
+                      color:
+                        (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor,
+                      marginVertical: 8,
+                    },
+                  ]}
+                >
+                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}
+                  {(pnl.dailyPnL || 0).toFixed(2)} USDT
                 </Text>
-                
+
                 <View style={{ flex: 1, marginTop: 16 }}>
                   {/* Y-Axis Labels (Absolute positioned on left) */}
-                  <View style={{ position: 'absolute', left: 0, top: 0, bottom: 20, justifyContent: 'space-between', zIndex: 10 }}>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>1.5K</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>1.0K</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>0.0K</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>-500</Text>
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 20,
+                      justifyContent: "space-between",
+                      zIndex: 10,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      1.5K
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      1.0K
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      0.0K
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      -500
+                    </Text>
                   </View>
-                  
+
                   {/* Chart Area */}
                   <View style={{ marginLeft: 30, flex: 1 }}>
-                    <Svg width="100%" height="100%" viewBox="0 0 300 120" preserveAspectRatio="none">
+                    <Svg
+                      width="100%"
+                      height="100%"
+                      viewBox="0 0 300 120"
+                      preserveAspectRatio="none"
+                    >
                       <Defs>
                         <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                          <Stop offset="0" stopColor={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} stopOpacity="0.4" />
-                          <Stop offset="1" stopColor={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} stopOpacity="0.0" />
+                          <Stop
+                            offset="0"
+                            stopColor={
+                              (pnl.dailyPnL || 0) >= 0
+                                ? successColor
+                                : dangerColor
+                            }
+                            stopOpacity="0.4"
+                          />
+                          <Stop
+                            offset="1"
+                            stopColor={
+                              (pnl.dailyPnL || 0) >= 0
+                                ? successColor
+                                : dangerColor
+                            }
+                            stopOpacity="0.0"
+                          />
                         </LinearGradient>
                       </Defs>
-                      <Path d={generateFilledChart(pnl.history?.profit).fill} fill="url(#grad)" />
-                      <Path d={generateFilledChart(pnl.history?.profit).line} fill="none" stroke={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <Path
+                        d={generateFilledChart(pnl.history?.profit).fill}
+                        fill="url(#grad)"
+                      />
+                      <Path
+                        d={generateFilledChart(pnl.history?.profit).line}
+                        fill="none"
+                        stroke={
+                          (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor
+                        }
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </Svg>
                   </View>
-                  
+
                   {/* X-Axis Labels */}
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginLeft: 30, marginTop: 8, paddingRight: 4 }}>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>00:00</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>06:00</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>12:00</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>18:00</Text>
-                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>24:00</Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginLeft: 30,
+                      marginTop: 8,
+                      paddingRight: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      00:00
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      06:00
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      12:00
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      18:00
+                    </Text>
+                    <Text
+                      style={{
+                        color: textMuted,
+                        fontSize: 10,
+                        fontFamily:
+                          Platform.OS === "ios" ? "Menlo" : "monospace",
+                      }}
+                    >
+                      24:00
+                    </Text>
                   </View>
                 </View>
               </View>
               <View style={[styles.tableCard, { height: 200 }]}>
-                 <Text style={styles.cardTitle}>Exposure by Asset</Text>
-                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 24 }}>
-                    <View style={styles.donutHole} />
-                    <View style={{ marginLeft: 32, gap: 12 }}>
-                       <Text style={styles.tableCellMuted}>● BTC (45.2%)</Text>
-                       <Text style={styles.tableCellMuted}>● ETH (22.1%)</Text>
-                       <Text style={styles.tableCellMuted}>● SOL (15.6%)</Text>
-                    </View>
-                 </View>
+                <Text style={styles.cardTitle}>Exposure by Asset</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginTop: 24,
+                  }}
+                >
+                  <View style={styles.donutHole} />
+                  <View style={{ marginLeft: 32, gap: 12 }}>
+                    <Text style={styles.tableCellMuted}>● BTC (45.2%)</Text>
+                    <Text style={styles.tableCellMuted}>● ETH (22.1%)</Text>
+                    <Text style={styles.tableCellMuted}>● SOL (15.6%)</Text>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
-          
         </ScrollView>
       </View>
     </View>
@@ -641,5 +1093,5 @@ const styles = StyleSheet.create({
     borderColor: accentColor,
     borderLeftColor: infoColor,
     borderRightColor: successColor,
-  }
+  },
 });
