@@ -10,7 +10,207 @@ import {
   Pressable,
   StyleSheet,
   Dimensions,
+  TextInput,
 } from "react-native";
+
+const PnLBar = React.memo(({ pnl }) => {
+  const GlobalStyles = createGlobalStyles();
+  if (!pnl) return null;
+  return (
+    <View style={[styles.statsBar, { marginTop: 16 }]}>
+      <View style={styles.statColumn}>
+        <Text style={GlobalStyles.labelSmall}>Total P&L</Text>
+        <Text style={[styles.statMainVal, { color: pnl.totalNetUSD >= 0 ? "#34d399" : "#f87171" }]}>
+          ${pnl.totalNetUSD?.toFixed(2) || "0.00"}
+        </Text>
+      </View>
+      <View style={styles.statColumn}>
+        <Text style={GlobalStyles.labelSmall}>Win Rate</Text>
+        <Text style={styles.statMainVal}>{pnl.winRatePercent?.toFixed(1) || "0"}%</Text>
+      </View>
+      <View style={styles.statColumn}>
+        <Text style={GlobalStyles.labelSmall}>Trades</Text>
+        <Text style={styles.statMainVal}>{pnl.totalTrades || 0}</Text>
+      </View>
+      <View style={styles.statColumn}>
+        <Text style={GlobalStyles.labelSmall}>Daily P&L</Text>
+        <Text style={[styles.statMainVal, { color: pnl.dailyPnL >= 0 ? "#34d399" : "#f87171" }]}>
+          ${pnl.dailyPnL?.toFixed(2) || "0.00"}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+const TradeLog = React.memo(({ trades }) => {
+  const GlobalStyles = createGlobalStyles();
+  return (
+    <View style={[styles.feedCard, { marginTop: 16 }]}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={GlobalStyles.sectionHeader}>Execution Log</Text>
+        <Text style={[styles.monoLabel, { color: "#818cf8" }]}>SIM</Text>
+      </View>
+      {trades.length === 0 ? (
+        <View style={styles.emptyFeed}>
+          <Text style={styles.emptyFeedText}>NO TRADES EXECUTED</Text>
+        </View>
+      ) : (
+        <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled={true}>
+          {trades.map((trade, idx) => (
+            <View key={trade.id || idx} style={styles.alertItem}>
+              <View style={styles.alertHeader}>
+                <Text style={styles.alertId}>{trade.id}</Text>
+                <Text style={styles.alertTime}>
+                  {new Date(trade.timestamp).toLocaleTimeString()}
+                </Text>
+              </View>
+              <View style={styles.alertRouteRow}>
+                <View style={styles.routeBadgeBuy}>
+                  <Text style={styles.routeBadgeText}>BUY: {trade.buyExchange}</Text>
+                </View>
+                <Text style={styles.routeArrow}>➔</Text>
+                <View style={styles.routeBadgeSell}>
+                  <Text style={styles.routeBadgeText}>SELL: {trade.sellExchange}</Text>
+                </View>
+              </View>
+              <View style={styles.alertDataRow}>
+                <View>
+                  <Text style={styles.alertDataLabel}>Vol / Status</Text>
+                  <Text style={styles.alertDataVal}>
+                    {trade.volumeBTC} BTC | <Text style={{ color: trade.status === 'FILLED' ? '#34d399' : '#fbbf24' }}>{trade.status}</Text>
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.alertDataLabel}>Net Profit</Text>
+                  <Text style={[styles.alertDataVal, { color: trade.netProfitUSD >= 0 ? '#34d399' : '#f87171' }]}>
+                    ${trade.netProfitUSD?.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+});
+
+const RiskAuditConsole = React.memo(({ auditLog }) => {
+  const GlobalStyles = createGlobalStyles();
+  return (
+    <View style={[styles.feedCard, { marginTop: 16, backgroundColor: '#0f172a' }]}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={GlobalStyles.sectionHeader}>Risk Audit Console</Text>
+        <Text style={[styles.monoLabel, { color: "#f87171" }]}>GUARD</Text>
+      </View>
+      {auditLog.length === 0 ? (
+        <View style={styles.emptyFeed}>
+          <Text style={styles.emptyFeedText}>NO BLOCKED TRADES</Text>
+        </View>
+      ) : (
+        <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
+          {auditLog.map((log, idx) => (
+            <View key={log.id || idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1e293b' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#f87171', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 12 }}>
+                  🛡️ BLOCKED: {log.compraEn} ➔ {log.vendeEn}
+                </Text>
+                <Text style={{ color: '#64748b', fontSize: 10 }}>
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </Text>
+              </View>
+              <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
+                Reason: {log.reason} | {log.detail}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+});
+
+const StrategyPrompter = React.memo(({ activeRules, onSetStrategy, agentResponse, agentLoading }) => {
+  const GlobalStyles = createGlobalStyles();
+  const [prompt, setPrompt] = useState("");
+
+  const handleSubmit = () => {
+    if (prompt.trim() !== "") {
+      onSetStrategy(prompt);
+      setPrompt("");
+    }
+  };
+
+  return (
+    <View style={[styles.feedCard, { marginTop: 16 }]}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={GlobalStyles.sectionHeader}>AI Strategy Prompter</Text>
+        <Text style={[styles.monoLabel, { color: "#a78bfa" }]}>NLP / BEDROCK</Text>
+      </View>
+      <TextInput
+        style={{
+          backgroundColor: '#1e293b',
+          color: '#f8fafc',
+          padding: 12,
+          borderRadius: 6,
+          fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+          minHeight: 60,
+          marginBottom: 12,
+          borderWidth: 1,
+          borderColor: '#334155'
+        }}
+        multiline
+        placeholderTextColor="#64748b"
+        placeholder="e.g. Look at our win rate. If it's below 50%, tighten spreads..."
+        value={prompt}
+        onChangeText={setPrompt}
+        editable={!agentLoading}
+      />
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <Pressable 
+          disabled={agentLoading} 
+          onPress={() => setPrompt("Check our current win rate and P&L. If we are profitable, make active rules more aggressive by setting min spread to 0.1%. Otherwise, set min spread to 0.4%")} 
+          style={{ backgroundColor: '#334155', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}
+        >
+          <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Check Status & Adjust</Text>
+        </Pressable>
+        <Pressable 
+          disabled={agentLoading} 
+          onPress={() => setPrompt("Tighten rules: set minSpreadPercent to 0.5% and maxExposureUSD to 100")} 
+          style={{ backgroundColor: '#334155', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}
+        >
+          <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Conservative Guard</Text>
+        </Pressable>
+        <Pressable 
+          disabled={agentLoading} 
+          onPress={handleSubmit} 
+          style={{ backgroundColor: agentLoading ? '#475569' : '#a78bfa', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 4, marginLeft: 'auto' }}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
+            {agentLoading ? "Thinking..." : "Update Rules"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* AI Agent Dialogue Box */}
+      {agentResponse && (
+        <View style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 6, marginBottom: 12, borderWidth: 1, borderColor: '#1e293b' }}>
+          <Text style={{ color: '#a78bfa', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>🤖 COPILOT AGENT:</Text>
+          <Text style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 18 }}>{agentResponse.response}</Text>
+          <Text style={{ color: '#475569', fontSize: 9, marginTop: 6, textAlign: 'right' }}>
+            Prompt: "{agentResponse.prompt}"
+          </Text>
+        </View>
+      )}
+
+      <View style={{ backgroundColor: '#0f172a', padding: 8, borderRadius: 4 }}>
+        <Text style={{ color: '#34d399', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+          Active Rules: {activeRules ? JSON.stringify(activeRules, null, 2) : "{}"}
+        </Text>
+      </View>
+    </View>
+  );
+});
 import { createMqttClient } from "../../utilsApp/mqttClient";
 import { getMqttToken } from "../../utilsApp/tokenGenerator";
 import { remoteLog } from "../../utilsApp/remoteLog";
@@ -124,6 +324,13 @@ export default function MainScreen() {
   const [exchangeFees, setExchangeFees] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [truePrice, setTruePrice] = useState(null);
+  const [activeRules, setActiveRules] = useState(null);
+  const [trades, setTrades] = useState([]);
+  const [pnl, setPnl] = useState(null);
+  const [auditLog, setAuditLog] = useState([]);
+  const [activeMqttClient, setActiveMqttClient] = useState(null);
+  const [agentResponse, setAgentResponse] = useState(null);
+  const [agentLoading, setAgentLoading] = useState(false);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const chartDataRef = useRef([]);
@@ -241,8 +448,18 @@ export default function MainScreen() {
       activeClient.on("connect", () => {
         remoteLog("WS connected", "INFO", "WS");
         setIsConnected(true);
+        setActiveMqttClient(activeClient);
         activeClient.subscribe(TOPIC);
         activeClient.subscribe("ARBITRAGE_ALERTS");
+        activeClient.subscribe("TRADE_EXECUTED");
+        activeClient.subscribe("PNL_UPDATE");
+        activeClient.subscribe("RISK_AUDIT");
+        activeClient.subscribe("ACTIVE_RULES");
+        activeClient.subscribe("SNAPSHOT");
+        activeClient.subscribe("AGENT_RESPONSE");
+        
+        // Request initial snapshot
+        activeClient.publish("GET_SNAPSHOT", JSON.stringify({}));
       });
 
       activeClient.on("message", (topic, message) => {
@@ -258,9 +475,35 @@ export default function MainScreen() {
             return;
           }
 
-          // ── Arbitrage Alerts message: prepend and slice to max 50 ───────────
+          // ── Alerts & Logs ──────────────────────────────────────────────────
           if (topic === "ARBITRAGE_ALERTS") {
             setAlerts((prev) => [data, ...prev].slice(0, 50));
+            return;
+          }
+          if (topic === "TRADE_EXECUTED") {
+            setTrades((prev) => [data, ...prev].slice(0, 100));
+            return;
+          }
+          if (topic === "PNL_UPDATE") {
+            setPnl(data);
+            return;
+          }
+          if (topic === "RISK_AUDIT") {
+            setAuditLog((prev) => [data, ...prev].slice(0, 50));
+            return;
+          }
+          if (topic === "ACTIVE_RULES") {
+            setActiveRules(data);
+            return;
+          }
+          if (topic === "AGENT_RESPONSE") {
+            setAgentResponse(data);
+            setAgentLoading(false);
+            return;
+          }
+          if (topic === "SNAPSHOT") {
+            if (data.trades) setTrades(data.trades);
+            if (data.pnl) setPnl(data.pnl);
             return;
           }
 
@@ -498,6 +741,8 @@ export default function MainScreen() {
           </View>
         </View>
 
+        <PnLBar pnl={pnl} />
+
         {/* ─── Layout Grid ─── */}
         <View
           style={[styles.layoutGrid, isLargeScreen && styles.layoutGridRow]}
@@ -527,6 +772,18 @@ export default function MainScreen() {
               />
             </View>
             <ArbitrageFeed alerts={alerts} />
+            <TradeLog trades={trades} />
+            <StrategyPrompter 
+              activeRules={activeRules} 
+              agentResponse={agentResponse}
+              agentLoading={agentLoading}
+              onSetStrategy={(prompt) => {
+                if (activeMqttClient) {
+                  setAgentLoading(true);
+                  activeMqttClient.publish('SET_STRATEGY', JSON.stringify({ prompt }));
+                }
+              }} 
+            />
           </View>
 
           {/* Exchange Table */}
@@ -647,6 +904,7 @@ export default function MainScreen() {
                   })}
               </ScrollView>
             </View>
+            <RiskAuditConsole auditLog={auditLog} />
           </View>
         </View>
       </ScrollView>

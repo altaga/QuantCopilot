@@ -1,11 +1,13 @@
 'use strict';
 
-const WebSocket    = require("ws");
-const mqtt         = require("mqtt-packet");
-const jwt          = require("jsonwebtoken");
-const Redis        = require("ioredis");
-const path         = require("path");
-const orchestrator = require("./orchestrator");
+const WebSocket      = require("ws");
+const mqtt           = require("mqtt-packet");
+const jwt            = require("jsonwebtoken");
+const Redis          = require("ioredis");
+const path           = require("path");
+const orchestrator   = require("./orchestrator");
+const { parsePromptToRules } = require("./tools/strategy-parser");
+const { processPrompt } = require("./tools/ai-agent");
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
@@ -106,10 +108,9 @@ function sendHistoryToClient(ws, topic) {
     }
 }
 
-// --- 💸 NUEVO: FUNCIÓN ESPECIAL: ENVIAR COMISIONES ---
-// Inyecta el diccionario de comisiones (Fees) para que el frontend pueda calcular P&L reales
+// --- 💸 FUNCIÓN ESPECIAL: ENVIAR COMISIONES + SNAPSHOT INICIAL ---
 function sendFeesToClient(ws, topic) {
-    if (topic === 'market/btc/ticker') { // Solo lo mandamos si están pidiendo datos de mercado
+    if (topic === 'market/btc/ticker') {
         if (orchestrator && typeof orchestrator.getExchangeFees === 'function') {
             const fees = orchestrator.getExchangeFees();
             ws.send(mqtt.generate({
@@ -119,7 +120,34 @@ function sendFeesToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 💸 [FEES] Diccionario estático de comisiones enviado a ${ws.clientId}`);
+            console.log(`${logTime()} 💸 [FEES] Diccionario de comisiones enviado a ${ws.clientId}`);
+        }
+
+        // Push active rules snapshot to new client
+        if (orchestrator && typeof orchestrator.getActiveRules === 'function') {
+            ws.send(mqtt.generate({
+                cmd:     'publish',
+                topic:   'ACTIVE_RULES',
+                payload: JSON.stringify(orchestrator.getActiveRules()),
+                qos:     0,
+                retain:  false
+            }));
+        }
+
+        // Push P&L + trade log snapshot to new client
+        if (orchestrator && typeof orchestrator.getPnLSummary === 'function') {
+            ws.send(mqtt.generate({
+                cmd:     'publish',
+                topic:   'SNAPSHOT',
+                payload: JSON.stringify({
+                    wallets: orchestrator.getWallets(),
+                    trades:  orchestrator.getTradeLog(),
+                    pnl:     orchestrator.getPnLSummary()
+                }),
+                qos:     0,
+                retain:  false
+            }));
+            console.log(`${logTime()} 📊 [SNAPSHOT] P&L + wallets enviados a ${ws.clientId}`);
         }
     }
 }
@@ -191,12 +219,58 @@ wss.on("connection", (ws, req) => {
             });
         }
 
-        // C. RECEPCIÓN DE PUBLICACIÓN (Client inyectando datos al Grid)
+        // C. RECEPCIÓN DE PUBLICACIÓN (Client → servidor)
         if (packet.cmd === "publish") {
-            const payload = packet.payload.toString();
-            redisPub.publish(packet.topic, JSON.stringify({
+            const inTopic   = packet.topic;
+            const rawPayload = packet.payload.toString();
+
+            // ── Command: Update strategy via natural language prompt ──
+            if (inTopic === 'SET_STRATEGY') {
+                try {
+                    const { prompt } = JSON.parse(rawPayload);
+                    console.log(`${logTime()} 🧠 [AGENT] Processing prompt: "${prompt}" for ${ws.clientId}`);
+                    
+                    processPrompt(prompt).then((agentResponse) => {
+                        redisPub.publish('AGENT_RESPONSE', JSON.stringify({
+                            prompt,
+                            response: agentResponse,
+                            timestamp: Date.now()
+                        }));
+                        console.log(`${logTime()} 🤖 [AGENT] Responded successfully to ${ws.clientId}`);
+                    }).catch((err) => {
+                        console.error(`${logTime()} ❌ [AGENT] Execution error:`, err.message);
+                        redisPub.publish('AGENT_RESPONSE', JSON.stringify({
+                            prompt,
+                            response: `❌ Agent processing error: ${err.message}`,
+                            timestamp: Date.now()
+                        }));
+                    });
+                } catch(e) {
+                    console.error(`${logTime()} ❌ [STRATEGY] Parse error:`, e.message);
+                }
+                return;
+            }
+
+            // ── Command: Request fresh wallet/P&L snapshot ──
+            if (inTopic === 'GET_SNAPSHOT') {
+                ws.send(mqtt.generate({
+                    cmd:     'publish',
+                    topic:   'SNAPSHOT',
+                    payload: JSON.stringify({
+                        wallets: orchestrator.getWallets(),
+                        trades:  orchestrator.getTradeLog(),
+                        pnl:     orchestrator.getPnLSummary()
+                    }),
+                    qos:     0,
+                    retain:  false
+                }));
+                return;
+            }
+
+            // Default: forward to Redis grid
+            redisPub.publish(inTopic, JSON.stringify({
                 sender:  ws.clientId,
-                payload: payload
+                payload: rawPayload
             }));
         }
 
