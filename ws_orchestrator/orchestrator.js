@@ -6,7 +6,7 @@ const DISPLAY_INTERVAL_MS = Math.round(1000 / DISPLAY_HZ);
 
 const EXCHANGES = [
     'binance', 'kraken', 'coinbase', 'okx', 'bitfinex',
-    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin'
+    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin', 'rektswap'
 ];
 
 // ─── MARKET DATA STATE (L2 In-Memory) ─────────────────────────────────────────
@@ -20,7 +20,8 @@ const marketData = {
     Gateio:   { bid: 0, ask: 0 },
     Gemini:   { bid: 0, ask: 0 },
     Bitstamp: { bid: 0, ask: 0 },
-    Kucoin:   { bid: 0, ask: 0 } // 🛡️ Hace match exacto con el módulo
+    Kucoin:   { bid: 0, ask: 0 },
+    RektSwap: { bid: 0, ask: 0 }
 };
 
 function updateMemory(exchange, bid, ask) {

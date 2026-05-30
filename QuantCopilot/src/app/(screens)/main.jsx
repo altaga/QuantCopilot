@@ -1,1222 +1,645 @@
-import React, { useEffect, useState, useRef, useContext } from "react";
-import { createChart, LineSeries } from "lightweight-charts";
-import {
-  Text,
-  View,
-  ScrollView,
-  SafeAreaView,
-  StatusBar,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Dimensions,
-  TextInput,
-} from "react-native";
-
-const PnLBar = React.memo(({ pnl }) => {
-  const GlobalStyles = createGlobalStyles();
-  if (!pnl) return null;
-  return (
-    <View style={[styles.statsBar, { marginTop: 16 }]}>
-      <View style={styles.statColumn}>
-        <Text style={GlobalStyles.labelSmall}>Total P&L</Text>
-        <Text style={[styles.statMainVal, { color: pnl.totalNetUSD >= 0 ? "#34d399" : "#f87171" }]}>
-          ${pnl.totalNetUSD?.toFixed(2) || "0.00"}
-        </Text>
-      </View>
-      <View style={styles.statColumn}>
-        <Text style={GlobalStyles.labelSmall}>Win Rate</Text>
-        <Text style={styles.statMainVal}>{pnl.winRatePercent?.toFixed(1) || "0"}%</Text>
-      </View>
-      <View style={styles.statColumn}>
-        <Text style={GlobalStyles.labelSmall}>Trades</Text>
-        <Text style={styles.statMainVal}>{pnl.totalTrades || 0}</Text>
-      </View>
-      <View style={styles.statColumn}>
-        <Text style={GlobalStyles.labelSmall}>Daily P&L</Text>
-        <Text style={[styles.statMainVal, { color: pnl.dailyPnL >= 0 ? "#34d399" : "#f87171" }]}>
-          ${pnl.dailyPnL?.toFixed(2) || "0.00"}
-        </Text>
-      </View>
-    </View>
-  );
-});
-
-const TradeLog = React.memo(({ trades }) => {
-  const GlobalStyles = createGlobalStyles();
-  return (
-    <View style={[styles.feedCard, { marginTop: 16 }]}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={GlobalStyles.sectionHeader}>Execution Log</Text>
-        <Text style={[styles.monoLabel, { color: "#818cf8" }]}>SIM</Text>
-      </View>
-      {trades.length === 0 ? (
-        <View style={styles.emptyFeed}>
-          <Text style={styles.emptyFeedText}>NO TRADES EXECUTED</Text>
-        </View>
-      ) : (
-        <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled={true}>
-          {trades.map((trade, idx) => (
-            <View key={trade.id || idx} style={styles.alertItem}>
-              <View style={styles.alertHeader}>
-                <Text style={styles.alertId}>{trade.id}</Text>
-                <Text style={styles.alertTime}>
-                  {new Date(trade.timestamp).toLocaleTimeString()}
-                </Text>
-              </View>
-              <View style={styles.alertRouteRow}>
-                <View style={styles.routeBadgeBuy}>
-                  <Text style={styles.routeBadgeText}>BUY: {trade.buyExchange}</Text>
-                </View>
-                <Text style={styles.routeArrow}>➔</Text>
-                <View style={styles.routeBadgeSell}>
-                  <Text style={styles.routeBadgeText}>SELL: {trade.sellExchange}</Text>
-                </View>
-              </View>
-              <View style={styles.alertDataRow}>
-                <View>
-                  <Text style={styles.alertDataLabel}>Vol / Status</Text>
-                  <Text style={styles.alertDataVal}>
-                    {trade.volumeBTC} BTC | <Text style={{ color: trade.status === 'FILLED' ? '#34d399' : '#fbbf24' }}>{trade.status}</Text>
-                  </Text>
-                </View>
-                <View>
-                  <Text style={styles.alertDataLabel}>Net Profit</Text>
-                  <Text style={[styles.alertDataVal, { color: trade.netProfitUSD >= 0 ? '#34d399' : '#f87171' }]}>
-                    ${trade.netProfitUSD?.toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-});
-
-const RiskAuditConsole = React.memo(({ auditLog }) => {
-  const GlobalStyles = createGlobalStyles();
-  return (
-    <View style={[styles.feedCard, { marginTop: 16, backgroundColor: '#0f172a' }]}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={GlobalStyles.sectionHeader}>Risk Audit Console</Text>
-        <Text style={[styles.monoLabel, { color: "#f87171" }]}>GUARD</Text>
-      </View>
-      {auditLog.length === 0 ? (
-        <View style={styles.emptyFeed}>
-          <Text style={styles.emptyFeedText}>NO BLOCKED TRADES</Text>
-        </View>
-      ) : (
-        <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
-          {auditLog.map((log, idx) => (
-            <View key={log.id || idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1e293b' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: '#f87171', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 12 }}>
-                  🛡️ BLOCKED: {log.compraEn} ➔ {log.vendeEn}
-                </Text>
-                <Text style={{ color: '#64748b', fontSize: 10 }}>
-                  {new Date(log.timestamp).toLocaleTimeString()}
-                </Text>
-              </View>
-              <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
-                Reason: {log.reason} | {log.detail}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-});
-
-const StrategyPrompter = React.memo(({ activeRules, onSetStrategy, agentResponse, agentLoading }) => {
-  const GlobalStyles = createGlobalStyles();
-  const [prompt, setPrompt] = useState("");
-
-  const handleSubmit = () => {
-    if (prompt.trim() !== "") {
-      onSetStrategy(prompt);
-      setPrompt("");
-    }
-  };
-
-  return (
-    <View style={[styles.feedCard, { marginTop: 16 }]}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={GlobalStyles.sectionHeader}>AI Strategy Prompter</Text>
-        <Text style={[styles.monoLabel, { color: "#a78bfa" }]}>NLP / BEDROCK</Text>
-      </View>
-      <TextInput
-        style={{
-          backgroundColor: '#1e293b',
-          color: '#f8fafc',
-          padding: 12,
-          borderRadius: 6,
-          fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-          minHeight: 60,
-          marginBottom: 12,
-          borderWidth: 1,
-          borderColor: '#334155'
-        }}
-        multiline
-        placeholderTextColor="#64748b"
-        placeholder="e.g. Look at our win rate. If it's below 50%, tighten spreads..."
-        value={prompt}
-        onChangeText={setPrompt}
-        editable={!agentLoading}
-      />
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <Pressable 
-          disabled={agentLoading} 
-          onPress={() => setPrompt("Check our current win rate and P&L. If we are profitable, make active rules more aggressive by setting min spread to 0.1%. Otherwise, set min spread to 0.4%")} 
-          style={{ backgroundColor: '#334155', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}
-        >
-          <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Check Status & Adjust</Text>
-        </Pressable>
-        <Pressable 
-          disabled={agentLoading} 
-          onPress={() => setPrompt("Tighten rules: set minSpreadPercent to 0.5% and maxExposureUSD to 100")} 
-          style={{ backgroundColor: '#334155', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}
-        >
-          <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Conservative Guard</Text>
-        </Pressable>
-        <Pressable 
-          disabled={agentLoading} 
-          onPress={handleSubmit} 
-          style={{ backgroundColor: agentLoading ? '#475569' : '#a78bfa', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 4, marginLeft: 'auto' }}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
-            {agentLoading ? "Thinking..." : "Update Rules"}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* AI Agent Dialogue Box */}
-      {agentResponse && (
-        <View style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 6, marginBottom: 12, borderWidth: 1, borderColor: '#1e293b' }}>
-          <Text style={{ color: '#a78bfa', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>🤖 COPILOT AGENT:</Text>
-          <Text style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 18 }}>{agentResponse.response}</Text>
-          <Text style={{ color: '#475569', fontSize: 9, marginTop: 6, textAlign: 'right' }}>
-            Prompt: "{agentResponse.prompt}"
-          </Text>
-        </View>
-      )}
-
-      <View style={{ backgroundColor: '#0f172a', padding: 8, borderRadius: 4 }}>
-        <Text style={{ color: '#34d399', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
-          Active Rules: {activeRules ? JSON.stringify(activeRules, null, 2) : "{}"}
-        </Text>
-      </View>
-    </View>
-  );
-});
+import React, { useEffect, useState, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, Platform, ScrollView, Dimensions, Image } from "react-native";
+import { useRouter } from "expo-router";
+import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import { 
+  Activity, ArrowRight, Home, Compass, Cpu, Briefcase, BarChart2, 
+  LineChart, Bell, FileText, Settings, ShieldAlert, Zap
+} from "lucide-react-native";
+import { 
+  createGlobalStyles, backgroundColor, cardColor, elevatedColor,
+  borderColor, textPrimary, textSecondary, textMuted,
+  accentColor, whiteColor, successColor, dangerColor, borderLight,
+  infoColor, warningColor
+} from "../../core/styles";
 import { createMqttClient } from "../../utilsApp/mqttClient";
 import { getMqttToken } from "../../utilsApp/tokenGenerator";
-import { remoteLog } from "../../utilsApp/remoteLog";
-import {
-  createGlobalStyles,
-  backgroundColor,
-  accentColor,
-  borderColor,
-  cardColor,
-  textSecondary,
-} from "../../core/styles";
-import ContextModule from "../../providers/contextModule";
 
-const BROKER_URL =
-  process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
-const TOPIC = "market/btc/ticker";
+const BROKER_URL = process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
+const BROKER_HTTP_URL = BROKER_URL.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
 
-remoteLog("Module loaded", "INFO", "BOOT");
+// Helper to draw smooth sparkline curves
+const generateSmoothSparkline = (data, width = 100, height = 35) => {
+  if (!data || data.length < 2) return `M0,${height/2} L${width},${height/2}`;
+  
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min === 0 ? 1 : max - min; 
+  
+  const points = data.map((val, idx) => {
+    const x = (idx / (data.length - 1)) * width;
+    const y = height - (((val - min) / range) * (height - 10)) - 5;
+    return {x, y};
+  });
+  
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = (p0.x + p1.x) / 2;
+    d += ` C${cp1x},${p0.y} ${cp1x},${p1.y} ${p1.x},${p1.y}`;
+  }
+  return d;
+};
 
-const EXCHANGES = [
-  "Binance",
-  "Kraken",
-  "Coinbase",
-  "OKX",
-  "Bitfinex",
-  "Bybit",
-  "Gateio",
-  "Gemini",
-  "Bitstamp",
-  "Kucoin",
-];
+// Helper for the main PnL chart with fill
+const generateFilledChart = (data, width = 300, height = 120) => {
+  if (!data || data.length < 2) {
+    return { line: `M0,${height/2} L${width},${height/2}`, fill: `M0,${height} L0,${height/2} L${width},${height/2} L${width},${height} Z` };
+  }
+  
+  const max = Math.max(...data, 1500); 
+  const min = Math.min(...data, -500);
+  const range = max - min === 0 ? 1 : max - min; 
+  
+  const points = data.map((val, idx) => {
+    const x = (idx / (data.length - 1)) * width;
+    const y = height - (((val - min) / range) * height);
+    return {x, y};
+  });
+  
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cp1x = (p0.x + p1.x) / 2;
+    d += ` C${cp1x},${p0.y} ${cp1x},${p1.y} ${p1.x},${p1.y}`;
+  }
+  
+  const fill = `${d} L${width},${height} L0,${height} Z`;
+  return { line: d, fill };
+};
 
-const ArbitrageFeed = React.memo(({ alerts }) => {
+export default function MainHub() {
+  const router = useRouter();
   const GlobalStyles = createGlobalStyles();
   
-  return (
-    <View style={styles.feedCard}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={GlobalStyles.sectionHeader}>Arbitrage Alert Feed</Text>
-        <Text style={[styles.monoLabel, { color: "#38bdf8" }]}>HFT</Text>
-      </View>
-      
-      {alerts.length === 0 ? (
-        <View style={styles.emptyFeed}>
-          <Text style={styles.emptyFeedText}>NO ARBITRAGE OPPORTUNITIES DETECTED</Text>
-          <Text style={styles.emptyFeedSubtext}>Monitoring live orderbooks at 2 Hz...</Text>
-        </View>
-      ) : (
-        <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled={true}>
-          {alerts.map((alert, idx) => {
-            const timeStr = alert.timestamp 
-              ? new Date(alert.timestamp * 1000).toLocaleTimeString()
-              : new Date().toLocaleTimeString();
-            return (
-              <View key={alert.id || idx} style={styles.alertItem}>
-                <View style={styles.alertHeader}>
-                  <Text style={styles.alertId}>{alert.id || "ARB-GENERIC"}</Text>
-                  <Text style={styles.alertTime}>{timeStr}</Text>
-                </View>
-                
-                <View style={styles.alertRouteRow}>
-                  <View style={styles.routeBadgeBuy}>
-                    <Text style={styles.routeBadgeText}>BUY: {alert.compraEn}</Text>
-                  </View>
-                  <Text style={styles.routeArrow}>➔</Text>
-                  <View style={styles.routeBadgeSell}>
-                    <Text style={styles.routeBadgeText}>SELL: {alert.vendeEn}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.alertDataRow}>
-                  <View>
-                    <Text style={styles.alertDataLabel}>Prices (B / S)</Text>
-                    <Text style={styles.alertDataVal}>
-                      ${alert.precioCompra?.toLocaleString(undefined, { minimumFractionDigits: 1 })} / ${alert.precioVenta?.toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.alertDataLabel}>Vol / Profit</Text>
-                    <Text style={styles.alertDataVal}>
-                      {alert.volumen} BTC | <Text style={styles.alertProfitText}>+${parseFloat((alert.profitTotalUSD ?? 0).toFixed(2))}</Text>
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
-    </View>
-  );
-});
-
-export default function MainScreen() {
-  const context = useContext(ContextModule);
-  const GlobalStyles = createGlobalStyles();
-
-  useEffect(() => {
-    remoteLog("Component mounted", "INFO", "BOOT");
-  }, []);
-
-  const [isConnected, setIsConnected] = useState(false);
-  const [marketData, setMarketData] = useState({}); // latest values for stats bar
-  const [marketHistory, setMarketHistory] = useState({}); // 50-tick history per exchange
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [selectedExchange, setSelectedExchange] = useState(
-    context?.value?.selectedExchange || "Binance",
-  );
   const [token, setToken] = useState(null);
-  const [tokenError, setTokenError] = useState(null);
-  const [exchangeFees, setExchangeFees] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [truePrice, setTruePrice] = useState(null);
-  const [activeRules, setActiveRules] = useState(null);
-  const [trades, setTrades] = useState([]);
-  const [pnl, setPnl] = useState(null);
-  const [auditLog, setAuditLog] = useState([]);
   const [activeMqttClient, setActiveMqttClient] = useState(null);
-  const [agentResponse, setAgentResponse] = useState(null);
-  const [agentLoading, setAgentLoading] = useState(false);
-  const chartContainerRef = useRef(null);
-  const chartRef = useRef(null);
-  const chartDataRef = useRef([]);
-  const lineSeriesRef = useRef(null);
-  const selectedExchangeRef = useRef(selectedExchange);
-  const historyLoadedRef = useRef(false);
-  const marketHistoryRef = useRef({});
+  
+  // Dashboard Live Data
+  const [pnl, setPnl] = useState({ totalNetUSD: 0, dailyPnL: 0, totalTrades: 0, winRatePercent: 0, totalBalanceUSD: 12540.32, blockedTradesCount: 0, totalRiskSavedUSD: 0 });
+  const [activeRules, setActiveRules] = useState({});
+  const [alerts, setAlerts] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
+  
+  const [serverTime, setServerTime] = useState(new Date().toUTCString());
 
-  const handleSelectExchange = (exchange) => {
-    setSelectedExchange(exchange);
-    selectedExchangeRef.current = exchange;
-    if (context && context.setValue) {
-      context.setValue({ selectedExchange: exchange });
-    }
-    // Rebuild chart from existing history for the new exchange
-    const history = marketHistoryRef.current[exchange] || [];
-    if (lineSeriesRef.current && history.length > 0) {
-      const points = history.map((tick) => ({
-        time: tick.ts,
-        value: (tick.bid + tick.ask) / 2,
-      }));
-      // Filter out duplicate timestamps keeping the latest one for lightweight-charts
-      const uniquePoints = [];
-      const seenTimes = new Set();
-      for (let i = points.length - 1; i >= 0; i--) {
-        const p = points[i];
-        if (!seenTimes.has(p.time)) {
-          seenTimes.add(p.time);
-          uniquePoints.unshift(p);
+  // Clock
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerTime(new Date().toISOString().substring(11, 19) + " UTC");
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch initial REST snapshot
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`${BROKER_HTTP_URL}/api/snapshot`);
+        if (!res.ok) return;
+        const snap = await res.json();
+        if (snap.rules) setActiveRules(snap.rules);
+        if (snap.pnl) {
+          setPnl(snap.pnl);
         }
+        // We leave alerts empty to only show live ones, or we could fetch trade history here.
+      } catch (e) {
+        console.warn("Bootstrap fetch failed:", e.message);
       }
-      chartDataRef.current = uniquePoints;
-      lineSeriesRef.current.setData(uniquePoints);
-      chartRef.current?.timeScale().fitContent();
-    }
-  };
-
-  // ─── Generate JWT locally (same library/params as ws_server/generator.js) ─────
-  useEffect(() => {
-    getMqttToken().then((token) => {
-      if (token) {
-        remoteLog(`Token ready len=${token.length}`, "INFO", "TOKEN");
-        setToken(token);
-        setTokenError(null);
-      } else {
-        remoteLog("Token unavailable", "ERROR", "TOKEN");
-        setTokenError("WSS_SECRET not set");
-      }
-    });
-  }, []);
-
-  // ─── Chart (hardcoded test) ────────────────────────────────────────────
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    const formatTime = (time) => {
-      const date = new Date(time);
-      if (isNaN(date.getTime())) return "";
-      const pad = (num) => num.toString().padStart(2, "0");
-      const ms = date.getMilliseconds().toString().padStart(3, "0");
-      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${ms}`;
     };
-
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 300,
-      layout: {
-        background: { color: "#0F0F11" },
-        textColor: "#FFFFFF",
-      },
-      grid: {
-        vertLines: { color: "#1F1F23" },
-        horzLines: { color: "#1F1F23" },
-      },
-      localization: {
-        timeFormatter: formatTime,
-      },
-      timeScale: {
-        visible: true,
-        tickMarkFormatter: formatTime,
-      },
-      priceScale: { visible: true },
-    });
-
-    const lineSeries = chart.addSeries(LineSeries, {
-      color: "#34d399",
-      lineWidth: 2,
-    });
-
-    lineSeriesRef.current = lineSeries;
-    chartRef.current = chart;
-
-    return () => chart.remove();
+    load();
   }, []);
 
-  // ─── Establish MQTT connection ─────────────────────────────────────────────
+  // Connect MQTT for live dashboard metrics
   useEffect(() => {
-    if (!token) {
-      if (tokenError)
-        remoteLog(`Token unavailable, WS skipped: ${tokenError}`, "WARN", "WS");
-      return;
-    }
+    getMqttToken().then(setToken);
+  }, []);
 
-    let reconnectTimer = null;
-    let activeClient = null;
+  useEffect(() => {
+    if (!token) return;
+    
+    const client = createMqttClient(BROKER_URL, { username: "ccm_id", password: token });
+    
+    client.on("connect", () => {
+      setActiveMqttClient(client);
+      client.subscribe("PNL_UPDATE");
+      client.subscribe("ARBITRAGE_ALERTS");
+      client.subscribe("RISK_AUDIT");
+      client.subscribe("ACTIVE_RULES");
+    });
 
-    const connect = () => {
-      remoteLog(`WS: connecting... tokenLen=${token.length}`, "INFO", "WS");
-      remoteLog(`WS: token JWT header=${token.split(".")[0]}`, "INFO", "WS");
-      activeClient = createMqttClient(BROKER_URL, {
-        username: "ccm_id",
-        password: token,
-      });
-
-      activeClient.on("connect", () => {
-        remoteLog("WS connected", "INFO", "WS");
-        setIsConnected(true);
-        setActiveMqttClient(activeClient);
-        activeClient.subscribe(TOPIC);
-        activeClient.subscribe("ARBITRAGE_ALERTS");
-        activeClient.subscribe("TRADE_EXECUTED");
-        activeClient.subscribe("PNL_UPDATE");
-        activeClient.subscribe("RISK_AUDIT");
-        activeClient.subscribe("ACTIVE_RULES");
-        activeClient.subscribe("SNAPSHOT");
-        activeClient.subscribe("AGENT_RESPONSE");
-        
-        // Request initial snapshot
-        activeClient.publish("GET_SNAPSHOT", JSON.stringify({}));
-      });
-
-      activeClient.on("message", (topic, message) => {
-        try {
-          let raw = message.toString();
-          if (!raw || raw === "[object Object]") return;
-          const data = JSON.parse(raw);
-          if (!data || typeof data !== "object") return;
-
-          // ── Fees message: store in state ──────────────────────────────────
-          if (topic === "market/btc/ticker/fees") {
-            setExchangeFees(data);
-            return;
-          }
-
-          // ── Alerts & Logs ──────────────────────────────────────────────────
-          if (topic === "ARBITRAGE_ALERTS") {
-            setAlerts((prev) => [data, ...prev].slice(0, 50));
-            return;
-          }
-          if (topic === "TRADE_EXECUTED") {
-            setTrades((prev) => [data, ...prev].slice(0, 100));
-            return;
-          }
-          if (topic === "PNL_UPDATE") {
-            setPnl(data);
-            return;
-          }
-          if (topic === "RISK_AUDIT") {
-            setAuditLog((prev) => [data, ...prev].slice(0, 50));
-            return;
-          }
-          if (topic === "ACTIVE_RULES") {
-            setActiveRules(data);
-            return;
-          }
-          if (topic === "AGENT_RESPONSE") {
-            setAgentResponse(data);
-            setAgentLoading(false);
-            return;
-          }
-          if (topic === "SNAPSHOT") {
-            if (data.trades) setTrades(data.trades);
-            if (data.pnl) setPnl(data.pnl);
-            return;
-          }
-
-          // ── History message: fill chart with last 50 values ─────────────────
-          if (topic && topic.endsWith("/history")) {
-            remoteLog(`Received historical data payload on topic: ${topic}`, "INFO", "HISTORY");
-            if (historyLoadedRef.current) return;
-            historyLoadedRef.current = true;
-
-            if (!data) return;
-            // Each item in history should have numeric ts
-            const histData = Array.isArray(data) ? data : [data];
-            if (!histData.length) return;
-
-            const chartPoints = [];
-            const latestSnapshots = {};
-            const newHistory = {};
-
-            histData.forEach((snap) => {
-              if (!snap || typeof snap.ts !== "number" || !isFinite(snap.ts))
-                return;
-              const snapData = snap.data || snap;
-              EXCHANGES.forEach((ex) => {
-                const exData = snapData && snapData[ex];
-                if (!exData) return;
-                const bid = parseFloat(exData.bid);
-                const ask = parseFloat(exData.ask);
-                if (!bid || !ask || isNaN(bid) || isNaN(ask)) return;
-                const tick = {
-                  bid,
-                  ask,
-                  spread: ask - bid,
-                  ts: snap.ts,
-                };
-                const history = newHistory[ex] || [];
-                newHistory[ex] = [...history, tick]
-                  .slice(-300)
-                  .filter((t) => t && t.bid && t.ask && t.ts && isFinite(t.ts));
-                latestSnapshots[ex] = exData;
-              });
-              if (snap.ts) {
-                const exData = latestSnapshots[selectedExchangeRef.current];
-                if (exData && exData.bid && exData.ask) {
-                  const mid =
-                    (parseFloat(exData.bid) + parseFloat(exData.ask)) / 2;
-                  chartPoints.push({
-                    time: snap.ts,
-                    value: mid,
-                  });
-                }
-              }
-            });
-
-            marketHistoryRef.current = newHistory;
-            setMarketHistory(newHistory);
-            setMarketData(latestSnapshots);
-            setLastUpdate(new Date());
-
-            const validPoints = chartPoints.filter(
-              (p) =>
-                p &&
-                p.time != null &&
-                p.value != null &&
-                !isNaN(p.time) &&
-                !isNaN(p.value),
-            );
-            // Filter out duplicate timestamps keeping the latest one for lightweight-charts
-            const uniquePoints = [];
-            const seenTimes = new Set();
-            for (let i = validPoints.length - 1; i >= 0; i--) {
-              const p = validPoints[i];
-              if (!seenTimes.has(p.time)) {
-                seenTimes.add(p.time);
-                uniquePoints.unshift(p);
-              }
-            }
-            if (lineSeriesRef.current && uniquePoints.length > 0) {
-              chartDataRef.current = uniquePoints;
-              lineSeriesRef.current.setData(uniquePoints);
-              chartRef.current?.timeScale().fitContent();
-              remoteLog(`Applied ${uniquePoints.length} unique history chart points for ${selectedExchangeRef.current}`, "INFO", "HISTORY");
-            } else {
-              remoteLog(`No chart points to render from history data`, "WARN", "HISTORY");
-            }
-            return;
-          }
-
-          // ── Live message: append new tick ─────────────────────────────────
-          if (typeof data.ts !== "number" || !isFinite(data.ts)) return;
-          if (!data) return;
-          const priceData = data.data || data;
-          if (!priceData || typeof priceData !== "object") return;
-          setMarketData(priceData);
-          setLastUpdate(new Date());
-          if (typeof data.truePrice === "number") {
-            setTruePrice(data.truePrice);
-          }
-
-          // Build rolling 50-tick history per exchange
-          const newHistory = { ...marketHistoryRef.current };
-          EXCHANGES.forEach((ex) => {
-            const exData = priceData[ex];
-            if (!exData) return;
-            const bid = parseFloat(exData.bid);
-            const ask = parseFloat(exData.ask);
-            if (!bid || !ask) return;
-            const tick = {
-              bid,
-              ask,
-              spread: ask - bid,
-              ts: data.ts,
-            };
-            if (!tick.ts || isNaN(tick.bid) || isNaN(tick.ask)) return;
-            const history = newHistory[ex] || [];
-            newHistory[ex] = [...history, tick]
-              .slice(-300)
-              .filter((t) => t && t.bid && t.ask && t.ts);
+    client.on("message", (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        if (topic === "PNL_UPDATE") {
+          setPnl(data);
+        }
+        if (topic === "ACTIVE_RULES") setActiveRules(data);
+        if (topic === "ARBITRAGE_ALERTS") {
+          setAlerts(prev => {
+            if (prev.some(a => a.id === data.id)) return prev;
+            return [data, ...prev].slice(0, 10); // Keep top 10 on dashboard
           });
-          marketHistoryRef.current = newHistory;
-          setMarketHistory(newHistory);
-
-          // Feed chart with selected exchange mid price
-          const exData = priceData[selectedExchangeRef.current];
-          if (exData && exData.bid && exData.ask) {
-            const mid = (parseFloat(exData.bid) + parseFloat(exData.ask)) / 2;
-            if (!mid || isNaN(mid)) return;
-            const time = data.ts;
-            if (!lineSeriesRef.current) return;
-            if (
-              !historyLoadedRef.current ||
-              chartDataRef.current.length === 0
-            ) {
-              chartDataRef.current = [{ time, value: mid }];
-              lineSeriesRef.current.setData(chartDataRef.current);
-              chartRef.current?.timeScale().fitContent();
-              historyLoadedRef.current = true;
-            } else {
-              lineSeriesRef.current.update({ time, value: mid });
-            }
-          }
-        } catch (e) {
-          remoteLog(`WS parse error: ${e.message}`, "ERROR", "WS");
         }
-      });
+        if (topic === "RISK_AUDIT") {
+          setAuditLog(prev => {
+            if (prev.some(a => a.id === data.id)) return prev;
+            return [data, ...prev].slice(0, 50);
+          });
+        }
+      } catch (e) {}
+    });
 
-      activeClient.on("error", (err) => {
-        remoteLog(`WS error: ${err.message || err}`, "ERROR", "WS");
-        setIsConnected(false);
-      });
+    return () => client.end();
+  }, [token]);
 
-      activeClient.on("close", () => {
-        remoteLog("WS disconnected — reconnecting in 5s", "WARN", "WS");
-        setIsConnected(false);
-        reconnectTimer = setTimeout(connect, 5000);
-      });
-    };
-
-    connect();
-
-    return () => {
-      clearTimeout(reconnectTimer);
-      if (activeClient) activeClient.end();
-    };
-  }, [token, tokenError]);
-
-  // ─── Render ───────────────────────────────────────────────────────────────
-  const selectedData = marketData[selectedExchange] || {};
-  const selectedBid = selectedData.bid ? parseFloat(selectedData.bid) : 0;
-  const selectedAsk = selectedData.ask ? parseFloat(selectedData.ask) : 0;
-  const selectedMid =
-    selectedBid > 0 && selectedAsk > 0 ? (selectedBid + selectedAsk) / 2 : 0;
-  const selectedSpread = selectedAsk - selectedBid;
-
-  const isLargeScreen =
-    Platform.OS === "web" && Dimensions.get("window").width > 768;
-
+  // Calculations for cards
+  const totalOpportunities = (pnl.totalTrades || 0) + alerts.length;
+  const riskSaved = (pnl.totalRiskSavedUSD || 0) + auditLog.reduce((acc, log) => acc + (parseFloat(log.profitTotalUSD) || 0), 0);
   return (
-    <SafeAreaView style={GlobalStyles.container}>
-      <StatusBar barStyle="light-content" />
-
-      <View style={GlobalStyles.header}>
-        <View>
-          <Text style={styles.brandText}>QUANTCOPILOT</Text>
-          <Text style={styles.subBrandText}>REAL-TIME ORDERBOOK FEED</Text>
-        </View>
-        <View style={styles.statusWrapper}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: isConnected ? "#34d399" : "#f87171" },
-            ]}
-          />
-          <Text style={styles.statusText}>
-            {isConnected ? "LIVE FEED ACTIVE" : "DISCONNECTED"}
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* ─── Stats Bar ─── */}
-        <View style={styles.statsBar}>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Asset</Text>
-            <Text style={styles.statMainVal}>BTC/USD</Text>
-          </View>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Mid</Text>
-            <Text style={[styles.statMainVal, { color: accentColor }]}>
-              {selectedMid > 0 ? `$${selectedMid.toLocaleString()}` : "---"}
-            </Text>
-          </View>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>True Price (VWAP)</Text>
-            <Text style={[styles.statMainVal, { color: "#38bdf8" }]}>
-              {truePrice > 0 ? `$${truePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "---"}
-            </Text>
-          </View>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Bid</Text>
-            <Text style={styles.statMainVal}>
-              {selectedBid > 0 ? `$${selectedBid.toLocaleString()}` : "---"}
-            </Text>
-          </View>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Ask</Text>
-            <Text style={styles.statMainVal}>
-              {selectedAsk > 0 ? `$${selectedAsk.toLocaleString()}` : "---"}
-            </Text>
-          </View>
-          <View style={styles.statColumn}>
-            <Text style={GlobalStyles.labelSmall}>Spread</Text>
-            <Text style={styles.statMainVal}>
-              {selectedSpread > 0 ? `$${parseFloat(selectedSpread.toFixed(4))}` : "---"}
-            </Text>
-          </View>
-        </View>
-
-        <PnLBar pnl={pnl} />
-
-        {/* ─── Layout Grid ─── */}
-        <View
-          style={[styles.layoutGrid, isLargeScreen && styles.layoutGridRow]}
-        >
-          {/* Chart placeholder */}
-          <View
-            style={[
-              styles.leftColumn,
-              isLargeScreen && { flex: 2, marginRight: 24 },
-            ]}
-          >
-            <View style={styles.sectionTitleRow}>
-              <Text style={GlobalStyles.sectionHeader}>
-                {selectedExchange} Mid Price
-              </Text>
-              <Text style={styles.monoLabel}>LIVE</Text>
-            </View>
-            <View style={styles.chartCard}>
-              <View
-                ref={chartContainerRef}
-                style={{ width: "100%", height: 300 }}
-                onLayout={(e) => {
-                  if (chartRef.current) {
-                    chartRef.current.resize(e.nativeEvent.layout.width, 300);
-                  }
-                }}
+    <View style={styles.layout}>
+      {/* ─── MAIN CONTENT ─── */}
+      <View style={styles.mainArea}>
+        {/* TOP NAVBAR */}
+        <View style={styles.topNav}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginRight: 32 }}>
+              <Image 
+                source={require("../../assets/logoBN.png")} 
+                style={{ 
+                  width: 60, height: 60, borderRadius: 12, 
+                  marginRight: 16, marginTop: 0 
+                }} 
+                resizeMode="contain"
               />
+              <View style={{ justifyContent: "center" }}>
+                <Text style={[styles.brandText, { fontSize: 24, color: whiteColor, fontWeight: "700", letterSpacing: -0.2, marginBottom: 2, lineHeight: 28 }]}>
+                  QuantCopilot
+                </Text>
+                <Text style={[styles.subBrandText, { fontSize: 13, color: "#A1A1AA", letterSpacing: 0, textTransform: "none", lineHeight: 18 }]}>
+                  AI Risk Copilot for{"\n"}Autonomous Arbitrage
+                </Text>
+              </View>
             </View>
-            <ArbitrageFeed alerts={alerts} />
-            <TradeLog trades={trades} />
-            <StrategyPrompter 
-              activeRules={activeRules} 
-              agentResponse={agentResponse}
-              agentLoading={agentLoading}
-              onSetStrategy={(prompt) => {
-                if (activeMqttClient) {
-                  setAgentLoading(true);
-                  activeMqttClient.publish('SET_STRATEGY', JSON.stringify({ prompt }));
-                }
-              }} 
-            />
-          </View>
+            
+            <View style={{ width: 1, height: 32, backgroundColor: borderColor, marginRight: 24 }} />
 
-          {/* Exchange Table */}
-          <View style={[styles.rightColumn, isLargeScreen && { flex: 1 }]}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={GlobalStyles.sectionHeader}>Exchange Monitor</Text>
-              <Text style={styles.monoLabel}>
-                {lastUpdate ? lastUpdate.toLocaleTimeString() : "WAITING"}
+            <Text style={styles.pageTitle}>Live Dashboard</Text>
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          </View>
+          
+          <View style={[styles.navStatsGroup, { alignItems: "center" }]}>
+            
+            {/* Connected Exchanges */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginRight: 16 }}>
+              <Text style={{ color: textSecondary, fontSize: 11, marginRight: 12, fontWeight: "500" }}>Connected Exchanges</Text>
+              
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <Image source={require("../../assets/exchanges/binance.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/okx.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/bybit.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/kraken.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/coinbase.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/bitfinex.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/gateio.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/gemini.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/bitstamp.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+                <Image source={require("../../assets/exchanges/kucoin.png")} style={{ width: 22, height: 22, borderRadius: 11 }} />
+              </View>
+            </View>
+
+            <View style={styles.navStat}>
+              <Text style={styles.navStatLabel}>System</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 2 }}>
+                <View style={[styles.statusDot, { marginRight: 6 }]} />
+                <Text style={styles.statusTextActive}>Operational</Text>
+              </View>
+            </View>
+            <View style={styles.navStat}>
+              <Text style={styles.navStatLabel}>Latency</Text>
+              <Text style={[styles.navStatValue, { color: successColor }]}>78 ms</Text>
+            </View>
+            <View style={styles.navStat}>
+              <Text style={styles.navStatLabel}>Server Time</Text>
+              <Text style={styles.navStatValue}>{serverTime}</Text>
+            </View>
+            <View style={styles.navStat}>
+              <Text style={styles.navStatLabel}>Account Balance</Text>
+              <Text style={[styles.navStatValue, { color: whiteColor }]}>
+                {pnl.totalBalanceUSD !== undefined ? pnl.totalBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "12,540.32"} USDT
               </Text>
             </View>
+          </View>
+        </View>
 
-            {/* Exchange selector */}
-            <View style={styles.tableCard}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>
-                  Exchange
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          
+          {/* METRIC CARDS ROW */}
+          <View style={styles.metricsRow}>
+            <View style={styles.metricCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Total Opportunities</Text>
+                <Text style={styles.metricValue}>{totalOpportunities}</Text>
+                <Text style={styles.metricChange}>+{alerts.length} vs last min</Text>
+              </View>
+              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 35">
+                  <Path d={generateSmoothSparkline(pnl.history?.opportunities)} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </View>
+            <View style={styles.metricCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Est. Net Profit (24h)</Text>
+                <Text style={[styles.metricValue, { color: (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor }]}>
+                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}{(pnl.dailyPnL || 0).toFixed(2)} USDT
                 </Text>
-                <Text style={styles.tableHeaderCell}>Bid</Text>
-                <Text style={styles.tableHeaderCell}>Ask</Text>
-                <Text style={styles.tableHeaderCell}>Spread</Text>
+                <Text style={styles.metricChange}>{(pnl.winRatePercent || 0).toFixed(1)}% Win Rate</Text>
+              </View>
+              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 35">
+                  <Path d={generateSmoothSparkline(pnl.history?.profit)} fill="none" stroke={successColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </View>
+            <View style={styles.metricCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Trades Executed (24h)</Text>
+                <Text style={styles.metricValue}>{pnl.totalTrades || 0}</Text>
+                <Text style={[styles.metricChange, { color: infoColor }]}>Success Rate {pnl.winRatePercent?.toFixed(1) || 0}%</Text>
+              </View>
+              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 35">
+                  <Path d={generateSmoothSparkline(pnl.history?.trades)} fill="none" stroke={infoColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </View>
+            <View style={styles.metricCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Risk Saved (24h)</Text>
+                <Text style={styles.metricValue}>{(pnl.totalRiskSavedUSD || 0).toFixed(2)} USDT</Text>
+                <Text style={[styles.metricChange, { color: dangerColor }]}>Blocked {pnl.blockedTradesCount || 0} trades</Text>
+              </View>
+              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 35">
+                  <Path d={generateSmoothSparkline(pnl.history?.riskSaved)} fill="none" stroke={warningColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </View>
+            <View style={styles.metricCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Max Drawdown (30d)</Text>
+                <Text style={[styles.metricValue, { color: dangerColor }]}>
+                  {(pnl.dailyPnL || 0) < 0 ? (pnl.dailyPnL || 0).toFixed(2) : "0.00"} USDT
+                </Text>
+                <Text style={[styles.metricChange, { color: warningColor }]}>
+                  Limit: {activeRules?.maxDailyLossUSD || -200} USDT
+                </Text>
+              </View>
+              <View style={{ width: 70, height: 35, marginLeft: 12, marginBottom: 4 }}>
+                <Svg width="100%" height="100%" viewBox="0 0 100 35">
+                  <Path d={generateSmoothSparkline(pnl.history?.drawdown)} fill="none" stroke="#a855f7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </View>
+          </View>
+
+          {/* MIDDLE ROW */}
+          <View style={styles.middleRow}>
+            {/* LIVE OPPORTUNITIES TABLE */}
+            <View style={styles.tableCard}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Live Opportunities</Text>
+                <View style={styles.badgeCount}><Text style={styles.badgeCountText}>{alerts.length}</Text></View>
               </View>
 
-              {EXCHANGES.map((exchange) => {
-                const exData = marketData[exchange] || {};
-                const bidVal = exData.bid ? parseFloat(exData.bid) : 0;
-                const askVal = exData.ask ? parseFloat(exData.ask) : 0;
-                const spreadVal = askVal - bidVal;
-                const isSelected = selectedExchange === exchange;
+              <View style={styles.tableHeaderRow}>
+                <Text style={[styles.tableHeader, { flex: 2 }]}>Market</Text>
+                <Text style={[styles.tableHeader, { flex: 2 }]}>Buy (Ex)</Text>
+                <Text style={[styles.tableHeader, { flex: 2 }]}>Sell (Ex)</Text>
+                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Spread</Text>
+                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Net %</Text>
+                <Text style={[styles.tableHeader, { flex: 1.5 }]}>Risk Score</Text>
+                <Text style={[styles.tableHeader, { flex: 1, textAlign: "right" }]}>Action</Text>
+              </View>
 
-                return (
-                  <Pressable
-                    key={exchange}
-                    onPress={() => handleSelectExchange(exchange)}
-                    style={[styles.tableRow, isSelected && styles.selectedRow]}
-                  >
-                    <View
-                      style={{
-                        flex: 1.5,
-                        flexDirection: "row",
-                        alignItems: "center",
-                      }}
-                    >
-                      {isSelected && <View style={styles.rowSelectorDot} />}
-                      <Text
-                        style={[
-                          styles.exchangeName,
-                          isSelected && { color: accentColor },
-                        ]}
-                      >
-                        {exchange}
-                      </Text>
-                    </View>
-                    <Text style={styles.priceValText}>
-                      {bidVal > 0 ? bidVal.toFixed(1) : "---"}
-                    </Text>
-                    <Text style={[styles.priceValText, { color: "#f87171" }]}>
-                      {askVal > 0 ? askVal.toFixed(1) : "---"}
-                    </Text>
-                    <Text style={[styles.priceValText, { color: accentColor }]}>
-                      {spreadVal > 0 ? parseFloat(spreadVal.toFixed(4)) : "---"}
-                    </Text>
+              {/* FAKE/STATIC ENTRY TO PROVE BTC/USD LINK WORKS */}
+              <View style={styles.tableRow}>
+                <View style={{ flex: 2 }}><Text style={styles.tableCellBold}>BTC/USD</Text></View>
+                <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>Binance</Text></View>
+                <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>RektSwap</Text></View>
+                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.50%</Text></View>
+                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.38%</Text></View>
+                <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: warningColor }]}>72/100</Text></View>
+                <View style={{ flex: 1, alignItems: "flex-end" }}>
+                  <Pressable style={styles.actionBtn} onPress={() => router.push("/(screens)/btcusd")}>
+                    <Text style={styles.actionBtnText}>View</Text>
                   </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Selected Exchange Fee Panel */}
-            {exchangeFees && exchangeFees[selectedExchange] && (
-              <View style={styles.feePanel}>
-                <Text style={styles.feeTitle}>{selectedExchange} Fee Matrix</Text>
-                <View style={styles.feeRow}>
-                  <Text style={styles.feeLabel}>Taker Fee:</Text>
-                  <Text style={styles.feeValue}>{(exchangeFees[selectedExchange].taker * 100).toFixed(2)}%</Text>
-                  <Text style={[styles.feeLabel, { marginLeft: 16 }]}>Withdrawal:</Text>
-                  <Text style={styles.feeValue}>{exchangeFees[selectedExchange].withdrawalBTC} BTC</Text>
                 </View>
               </View>
-            )}
 
-            {/* 50-tick history */}
-            <View style={[styles.tableCard, { marginTop: 16 }]}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Time</Text>
-                <Text style={styles.tableHeaderCell}>Bid</Text>
-                <Text style={styles.tableHeaderCell}>Ask</Text>
-                <Text style={styles.tableHeaderCell}>Spread</Text>
-              </View>
-              <ScrollView style={{ maxHeight: 400 }}>
-                {(marketHistory[selectedExchange ?? "Binance"] || [])
-                  .filter(
-                    (t) => t && t.bid != null && t.ask != null && t.ts != null,
-                  )
-                  .slice(-50)
-                  .reverse()
-                  .map((tick, i) => {
-                    if (!tick || !tick.ts) return null;
-                    const ts = new Date(tick.ts).toLocaleTimeString() || "--";
-                    return (
-                      <View key={`${tick.ts}-${i}`} style={styles.tableRow}>
-                        <Text style={[styles.priceValText, { flex: 1 }]}>
-                          {ts}
-                        </Text>
-                        <Text style={[styles.priceValText, {}]}>
-                          {(tick.bid ?? 0).toFixed(1)}
-                        </Text>
-                        <Text
-                          style={[styles.priceValText, { color: "#f87171" }]}
-                        >
-                          {(tick.ask ?? 0).toFixed(1)}
-                        </Text>
-                        <Text
-                          style={[styles.priceValText, { color: accentColor }]}
-                        >
-                          {parseFloat((tick.spread ?? 0).toFixed(4))}
-                        </Text>
-                      </View>
-                    );
-                  })}
-              </ScrollView>
+              {alerts.map((alert, idx) => (
+                <View key={idx} style={styles.tableRow}>
+                  <View style={{ flex: 2 }}><Text style={styles.tableCellBold}>BTC/USD</Text></View>
+                  <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>{alert.compraEn}</Text></View>
+                  <View style={{ flex: 2 }}><Text style={styles.tableCellMuted}>{alert.vendeEn}</Text></View>
+                  <View style={{ flex: 1.5 }}>
+                    <Text style={[styles.tableCell, { color: successColor }]}>
+                      {alert.precioCompra > 0 ? (((alert.precioVenta - alert.precioCompra)/alert.precioCompra)*100).toFixed(2) : "0"}%
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: successColor }]}>0.30%</Text></View>
+                  <View style={{ flex: 1.5 }}><Text style={[styles.tableCell, { color: warningColor }]}>60/100</Text></View>
+                  <View style={{ flex: 1, alignItems: "flex-end" }}>
+                    <Pressable style={styles.actionBtn} onPress={() => router.push("/(screens)/btcusd")}>
+                      <Text style={styles.actionBtnText}>View</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
             </View>
-            <RiskAuditConsole auditLog={auditLog} />
+
+            {/* PNL PLACEHOLDER & EXPOSURE */}
+            <View style={styles.chartsColumn}>
+              <View style={[styles.tableCard, { flex: 1, marginBottom: 16 }]}>
+                <Text style={styles.cardTitle}>PnL Overview (24h)</Text>
+                <Text style={[styles.metricValue, { fontSize: 24, color: (pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor, marginVertical: 8 }]}>
+                  {(pnl.dailyPnL || 0) >= 0 ? "+" : ""}{(pnl.dailyPnL || 0).toFixed(2)} USDT
+                </Text>
+                
+                <View style={{ flex: 1, marginTop: 16 }}>
+                  {/* Y-Axis Labels (Absolute positioned on left) */}
+                  <View style={{ position: 'absolute', left: 0, top: 0, bottom: 20, justifyContent: 'space-between', zIndex: 10 }}>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>1.5K</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>1.0K</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>0.0K</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>-500</Text>
+                  </View>
+                  
+                  {/* Chart Area */}
+                  <View style={{ marginLeft: 30, flex: 1 }}>
+                    <Svg width="100%" height="100%" viewBox="0 0 300 120" preserveAspectRatio="none">
+                      <Defs>
+                        <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                          <Stop offset="0" stopColor={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} stopOpacity="0.4" />
+                          <Stop offset="1" stopColor={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} stopOpacity="0.0" />
+                        </LinearGradient>
+                      </Defs>
+                      <Path d={generateFilledChart(pnl.history?.profit).fill} fill="url(#grad)" />
+                      <Path d={generateFilledChart(pnl.history?.profit).line} fill="none" stroke={(pnl.dailyPnL || 0) >= 0 ? successColor : dangerColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </View>
+                  
+                  {/* X-Axis Labels */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginLeft: 30, marginTop: 8, paddingRight: 4 }}>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>00:00</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>06:00</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>12:00</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>18:00</Text>
+                    <Text style={{ color: textMuted, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>24:00</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={[styles.tableCard, { height: 200 }]}>
+                 <Text style={styles.cardTitle}>Exposure by Asset</Text>
+                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 24 }}>
+                    <View style={styles.donutHole} />
+                    <View style={{ marginLeft: 32, gap: 12 }}>
+                       <Text style={styles.tableCellMuted}>● BTC (45.2%)</Text>
+                       <Text style={styles.tableCellMuted}>● ETH (22.1%)</Text>
+                       <Text style={styles.tableCellMuted}>● SOL (15.6%)</Text>
+                    </View>
+                 </View>
+              </View>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 60,
+  layout: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: backgroundColor,
   },
   brandText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
+    color: whiteColor,
     fontSize: 20,
-    letterSpacing: 2,
+    fontWeight: "600",
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
   subBrandText: {
-    color: textSecondary,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    marginTop: 2,
-  },
-  statusWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: borderColor,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 4,
+    color: textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: successColor,
     marginRight: 8,
+    shadowColor: successColor,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
   },
-  statusText: {
-    color: "#FFFFFF",
+  statusTextActive: {
+    color: successColor,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  mainArea: {
+    flex: 1,
+    backgroundColor: backgroundColor,
+  },
+  topNav: {
+    height: 84,
+    borderBottomWidth: 1,
+    borderBottomColor: borderColor,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  pageTitle: {
+    color: whiteColor,
+    fontSize: 20,
+    fontWeight: "600",
+    marginRight: 12,
+  },
+  liveBadge: {
+    backgroundColor: "rgba(74, 222, 128, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  liveBadgeText: {
+    color: successColor,
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 1,
   },
-  statsBar: {
+  navStatsGroup: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    borderWidth: 1,
-    borderColor: borderColor,
-    backgroundColor: cardColor,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 4,
-    marginBottom: 24,
+    gap: 32,
   },
-  statColumn: {
-    flex: 1,
-    minWidth: 120,
-    paddingVertical: 6,
-  },
-  statMainVal: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 18,
-    marginTop: 4,
-  },
-  layoutGrid: {
-    flexDirection: "column",
-  },
-  layoutGridRow: {
-    flexDirection: "row",
-  },
-  leftColumn: {
-    marginBottom: 24,
-  },
-  rightColumn: {
-    marginBottom: 24,
-  },
-  sectionTitleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  navStat: {
     alignItems: "flex-end",
-    marginBottom: 12,
-    paddingHorizontal: 4,
   },
-  monoLabel: {
-    color: "#34d399",
-    fontSize: 9,
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-    letterSpacing: 1.2,
+  navStatLabel: {
+    color: textMuted,
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  chartCard: {
-    backgroundColor: cardColor,
-    borderWidth: 1,
-    borderColor: borderColor,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  chartPlaceholder: {
-    height: 320,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  placeholderText: {
+  navStatValue: {
     color: textSecondary,
     fontSize: 13,
+    fontWeight: "600",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
-  tableCard: {
+  scrollContent: {
+    padding: 24,
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 24,
+    flexWrap: "wrap",
+  },
+  metricCard: {
+    flex: 1,
+    minWidth: 220,
     backgroundColor: cardColor,
     borderWidth: 1,
     borderColor: borderColor,
-    borderRadius: 4,
-    overflow: "hidden",
+    borderRadius: 8,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
   },
-  mobileChartPlaceholder: {
-    minHeight: 200,
-    justifyContent: "center",
-    alignItems: "center",
+  metricLabel: {
+    color: textMuted,
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: 12,
+  },
+  metricValue: {
+    color: whiteColor,
+    fontSize: 28,
+    fontWeight: "600",
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  metricChange: {
+    color: successColor,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  middleRow: {
+    flexDirection: "row",
+    gap: 24,
+  },
+  tableCard: {
+    flex: 2,
+    backgroundColor: cardColor,
+    borderWidth: 1,
+    borderColor: borderColor,
+    borderRadius: 8,
     padding: 24,
   },
-  tableHeader: {
+  chartsColumn: {
+    flex: 1,
+  },
+  cardHeader: {
     flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  cardTitle: {
+    color: whiteColor,
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  badgeCount: {
+    backgroundColor: elevatedColor,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 12,
+  },
+  badgeCountText: {
+    color: successColor,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: borderColor,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#0F0F11",
+    marginBottom: 12,
   },
-  tableHeaderCell: {
-    color: textSecondary,
+  tableHeader: {
+    color: textMuted,
     fontSize: 11,
-    fontWeight: "700",
-    flex: 1,
-    textAlign: "right",
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#161619",
     alignItems: "center",
-  },
-  selectedRow: {
-    backgroundColor: "#161619",
-  },
-  exchangeName: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  rowSelectorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: accentColor,
-    marginRight: 8,
-  },
-  priceValText: {
-    color: "#34d399",
-    fontWeight: "600",
-    fontSize: 13,
-    flex: 1,
-    textAlign: "right",
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    color: textSecondary,
-    fontSize: 13,
-  },
-  feedCard: {
-    backgroundColor: cardColor,
-    borderWidth: 1,
-    borderColor: borderColor,
-    borderRadius: 4,
-    overflow: "hidden",
-    marginTop: 24,
-    padding: 16,
-  },
-  emptyFeed: {
-    height: 150,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: borderColor,
-    borderRadius: 4,
-  },
-  emptyFeedText: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  emptyFeedSubtext: {
-    color: "#475569",
-    fontSize: 10,
-    marginTop: 4,
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  alertItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#161619",
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: elevatedColor,
   },
-  alertHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+  tableCellBold: {
+    color: whiteColor,
+    fontSize: 13,
+    fontWeight: "600",
   },
-  alertId: {
-    color: "#94a3b8",
-    fontSize: 11,
-    fontWeight: "700",
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  alertTime: {
-    color: "#475569",
-    fontSize: 10,
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  alertRouteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  routeBadgeBuy: {
-    backgroundColor: "rgba(52, 211, 153, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(52, 211, 153, 0.3)",
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 2,
-  },
-  routeBadgeSell: {
-    backgroundColor: "rgba(248, 113, 113, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(248, 113, 113, 0.3)",
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 2,
-  },
-  routeBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  routeArrow: {
-    color: "#64748b",
-    marginHorizontal: 8,
-    fontSize: 12,
-  },
-  alertDataRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  alertDataLabel: {
-    color: "#475569",
-    fontSize: 9,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  alertDataVal: {
-    color: "#e2e8f0",
-    fontSize: 11,
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
-  },
-  alertProfitText: {
-    color: "#34d399",
-    fontWeight: "700",
-  },
-  feePanel: {
-    backgroundColor: cardColor,
-    borderWidth: 1,
-    borderColor: borderColor,
-    borderRadius: 4,
-    padding: 16,
-    marginTop: 16,
-  },
-  feeTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    textTransform: "uppercase",
-  },
-  feeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  feeLabel: {
+  tableCellMuted: {
     color: textSecondary,
-    fontSize: 11,
-    marginRight: 6,
+    fontSize: 13,
   },
-  feeValue: {
-    color: "#FFFFFF",
+  tableCell: {
+    color: textPrimary,
+    fontSize: 13,
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  actionBtn: {
+    backgroundColor: "rgba(96, 165, 250, 0.15)", // info color tinted
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  actionBtnText: {
+    color: "#60A5FA",
     fontSize: 11,
     fontWeight: "600",
-    fontFamily: Platform.OS === "web" ? "monospace" : "System",
   },
+  donutHole: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 16,
+    borderColor: accentColor,
+    borderLeftColor: infoColor,
+    borderRightColor: successColor,
+  }
 });

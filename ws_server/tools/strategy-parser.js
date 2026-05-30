@@ -16,7 +16,7 @@ const PRESETS = {
         maxDailyLossUSD:     -50,
         maxConsecutiveLosses: 2,
         avoidHighVolatility:  true,
-        exchangeWhitelist:    [],
+        exchangeBlacklist:    [],
         killSwitch:           false
     },
     'volatility shield': {
@@ -25,7 +25,7 @@ const PRESETS = {
         maxDailyLossUSD:     -100,
         maxConsecutiveLosses: 4,
         avoidHighVolatility:  true,
-        exchangeWhitelist:    [],
+        exchangeBlacklist:    [],
         killSwitch:           false
     },
     aggressive: {
@@ -34,7 +34,7 @@ const PRESETS = {
         maxDailyLossUSD:     -500,
         maxConsecutiveLosses: 10,
         avoidHighVolatility:  false,
-        exchangeWhitelist:    [],
+        exchangeBlacklist:    [],
         killSwitch:           false
     }
 };
@@ -84,14 +84,14 @@ function parsePromptToRules(prompt) {
         rules.killSwitch = true;
     }
 
-    // exchangeWhitelist — "only use binance and kraken", "only trade on coinbase"
-    const whitelistMatch = text.match(/only\s*(?:use|trade|on|from)?\s*(.+?)(?:\.|,|and|$)/);
-    if (whitelistMatch) {
-        const segment = whitelistMatch[1];
+    // exchangeBlacklist — "blacklist binance", "don't use kraken", "exclude coinbase"
+    const blacklistMatch = text.match(/(?:blacklist|exclude|don't\s*use|avoid\s*exchange|avoid)\s*(.+?)(?:\.|,|and|$)/);
+    if (blacklistMatch) {
+        const segment = blacklistMatch[1];
         const found = KNOWN_EXCHANGES.filter(ex => segment.includes(ex));
         if (found.length > 0) {
             // Capitalize first letter to match server-side exchange keys
-            rules.exchangeWhitelist = found.map(ex => ex.charAt(0).toUpperCase() + ex.slice(1));
+            rules.exchangeBlacklist = found.map(ex => ex.charAt(0).toUpperCase() + ex.slice(1));
         }
     }
 

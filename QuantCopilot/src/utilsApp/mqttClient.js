@@ -5,7 +5,7 @@ import { remoteLog } from "./remoteLog";
 
 function encode(str) {
   const bytes = Buffer.from(str, "utf-8");
-  return [bytes.length >> 8, bytes.length & 0xff, ...bytes];
+  return [bytes.length >> 8, bytes.length & 0xff, ...Array.from(bytes)];
 }
 
 function encodeRemaining(len) {
@@ -57,6 +57,20 @@ function buildSubscribe(topic, msgId = 1) {
 
 function buildPingReq() {
   return Buffer.from([0xc0, 0x00]);
+}
+
+function buildPublish(topic, payload) {
+  const topicBytes = encode(topic); // Includes 2-byte length prefix
+  const payloadBytes = Buffer.from(payload, "utf-8"); 
+  const rawPayload = Array.from(payloadBytes); // Convert to plain Array for safe spreading in browser polyfills
+  const totalLen = topicBytes.length + rawPayload.length;
+
+  return Buffer.from([
+    0x30, // MQTT Publish, QoS 0
+    ...encodeRemaining(totalLen),
+    ...topicBytes,
+    ...rawPayload,
+  ]);
 }
 
 // ─── MQTT Frame Parser ─────────────────────────────────────────────────────
@@ -184,6 +198,10 @@ export function createMqttClient(url, options = {}) {
     subscribe(topic) {
       remoteLog(`subscribe: ${topic}`, "INFO", "WS");
       if (connected) send(buildSubscribe(topic));
+    },
+    publish(topic, payload) {
+      remoteLog(`publish: ${topic}`, "INFO", "WS");
+      if (connected) send(buildPublish(topic, payload));
     },
     end() {
       remoteLog("end()", "INFO", "WS");

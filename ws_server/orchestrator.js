@@ -15,7 +15,7 @@ const PUBLISH_INTERVAL_MS = Math.round(1000 / PUBLISH_HZ);
 
 const EXCHANGES = [
     'binance', 'kraken', 'coinbase', 'okx', 'bitfinex',
-    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin'
+    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin', 'rektswap'
 ];
 
 // Baseline slippage floor (USD)
@@ -32,11 +32,21 @@ const marketData = {
     Gateio:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
     Gemini:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
     Bitstamp: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
-    Kucoin:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 }
+    Kucoin:   { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 },
+    RektSwap: { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 }
 };
 
 let globalExchangeFees = {};
 let redisClientRef     = null;
+
+let metricsHistory = {
+    opportunities: Array(20).fill(0),
+    profit: Array(20).fill(0),
+    trades: Array(20).fill(0),
+    riskSaved: Array(20).fill(0),
+    drawdown: Array(20).fill(0)
+};
+let opportunitiesDetected = 0;
 
 // ─── ACTIVE RULES (mutable by client via SET_STRATEGY) ───────────────────────
 let activeRules = { ...DEFAULT_RULES };
@@ -44,6 +54,11 @@ let activeRules = { ...DEFAULT_RULES };
 function setActiveRules(partial) {
     activeRules = { ...activeRules, ...partial };
     console.log('[ORCH] Active rules updated:', JSON.stringify(activeRules));
+
+    if (activeRules.enableRektSwap === false) {
+        marketData.RektSwap = { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 };
+    }
+
     if (redisClientRef) {
         redisClientRef.publish('ACTIVE_RULES', JSON.stringify(activeRules));
     }
@@ -52,6 +67,11 @@ function setActiveRules(partial) {
 // ─── CORE FUNCTIONS ───────────────────────────────────────────────────────────
 
 function updateMemory(exchange, bidPrice, bidVol, askPrice, askVol) {
+    if (exchange === 'RektSwap' && activeRules.enableRektSwap === false) {
+        marketData.RektSwap = { bid: 0, bidVol: 0, ask: 0, askVol: 0, timestamp: 0 };
+        return; // Completely ignore RektSwap when disabled by the UI
+    }
+
     let updated = false;
 
     if (bidPrice !== null && bidPrice > 0) {
@@ -106,19 +126,15 @@ async function detectCrossExchangeArbitrage() {
                 const ingresoVentaReal   = bidB * (1 - feeB);
                 const profitNetoPorUnidad = ingresoVentaReal - costoCompraReal;
 
-                // Dynamic withdrawal fee via VWAP oracle
-                const truePrice              = calculateTruePrice(marketData) || askA;
-                const withdrawalBTC          = globalExchangeFees[exchangeA]?.withdrawalBTC || 0.0003;
-                const dynamicWithdrawalFeeUSD = withdrawalBTC * truePrice;
-
                 // Dynamic slippage (size-aware floor)
                 const dynamicSlippageUSD = Math.max(EST_SLIPPAGE_USD, (askA * volumenEjecutable) * 0.0001);
 
-                const gananciaNetaTotalUSD = (profitNetoPorUnidad * volumenEjecutable) - (dynamicWithdrawalFeeUSD + dynamicSlippageUSD);
+                const gananciaNetaTotalUSD = (profitNetoPorUnidad * volumenEjecutable) - dynamicSlippageUSD;
 
                 if (gananciaNetaTotalUSD > 0) {
+                    opportunitiesDetected++;
                     const oportunidad = {
-                        id:           `ARB-${Date.now()}`,
+                        id:           `ARB-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
                         compraEn:     exchangeA,
                         vendeEn:      exchangeB,
                         precioCompra: askA,
@@ -226,11 +242,29 @@ async function start(redisPub) {
 
         redisPub.publish(TOPIC, JSON.stringify(msg));
     }, PUBLISH_INTERVAL_MS);
+
+    // ── PERIODIC PNL & RULES BROADCAST (every 2s) ────────────────────────
+    // Ensures the dashboard always has fresh metrics, even when no trades execute
+    setInterval(() => {
+        const pnl = getPnLSummary();
+        
+        metricsHistory.profit = [...metricsHistory.profit, pnl.dailyPnL || 0].slice(-20);
+        metricsHistory.trades = [...metricsHistory.trades, pnl.totalTrades || 0].slice(-20);
+        metricsHistory.riskSaved = [...metricsHistory.riskSaved, pnl.totalRiskSavedUSD || 0].slice(-20);
+        metricsHistory.drawdown = [...metricsHistory.drawdown, (pnl.dailyPnL || 0) < 0 ? pnl.dailyPnL : 0].slice(-20);
+        metricsHistory.opportunities = [...metricsHistory.opportunities, opportunitiesDetected].slice(-20);
+        
+        const payload = { ...pnl, history: metricsHistory };
+
+        redisPub.publish(PNL_TOPIC, JSON.stringify(payload));
+        redisPub.publish('ACTIVE_RULES', JSON.stringify(activeRules));
+    }, 2000);
 }
 
 function getExchangeFees()  { return globalExchangeFees; }
 function getActiveRules()   { return { ...activeRules }; }
 function getMarketData()    { return marketData; }
+function getFullPnL()       { return { ...getPnLSummary(), history: metricsHistory }; }
 
 module.exports = {
     start,
@@ -241,5 +275,6 @@ module.exports = {
     getWallets,
     getTradeLog,
     getPnLSummary,
+    getFullPnL,
     getMarketData
 };

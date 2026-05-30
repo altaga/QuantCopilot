@@ -8,9 +8,7 @@ const FEE_CONFIG = {
 };
 
 const ENDPOINTS = [
-    { url: 'wss://stream.binance.us:9443/ws/btcusd@bookTicker',   label: 'Binance.US' },
-    { url: 'wss://data-api.binance.vision/ws/btcusdt@bookTicker', label: 'Binance Vision (Data API)' },
-    { url: 'wss://stream.binance.com:9443/ws/btcusdt@bookTicker', label: 'Binance.com' },
+    { url: 'wss://stream.binance.us:9443/ws/btcusd@bookTicker',   label: 'Binance.US' }
 ];
 
 function connect(updateMemory, endpointIndex = 0) {
@@ -21,25 +19,48 @@ function connect(updateMemory, endpointIndex = 0) {
 
     const { url, label } = ENDPOINTS[endpointIndex];
     const ws = new WebSocket(url);
-    let redirecting = false;
+    let opened = false;
+    let fallbackTriggered = false;
 
-    ws.on('open', () => console.log(`✅ [BINANCE] Conectado vía ${label}`));
+    const triggerFallback = () => {
+        if (fallbackTriggered) return;
+        fallbackTriggered = true;
+        ws.terminate();
+        console.warn(`⚠️ [BINANCE] Conexión fallida con ${label}. Probando fallback...`);
+        setTimeout(() => connect(updateMemory, endpointIndex + 1), 1000);
+    };
+
+    ws.on('open', () => {
+        opened = true;
+        console.log(`✅ [BINANCE] Conectado vía ${label}`);
+    });
 
     ws.on('message', (data) => {
         const j = JSON.parse(data);
         if (j.b && j.a && j.B && j.A) {
-            // (exchange, bidPrice, bidVol, askPrice, askVol)
             updateMemory('Binance', parseFloat(j.b), parseFloat(j.B), parseFloat(j.a), parseFloat(j.A));
         }
     });
 
-    ws.on('unexpected-response', (_req, res) => {
-        redirecting = true;
-        ws.terminate();
-        setTimeout(() => connect(updateMemory, endpointIndex + 1), 1000);
+    ws.on('unexpected-response', () => {
+        triggerFallback();
     });
 
-    ws.on('error', (err) => { if (!redirecting) console.error('❌ [BINANCE] Error:', err.message); });
+    ws.on('error', (err) => {
+        if (!opened) {
+            console.error(`❌ [BINANCE] Error de conexión en ${label}:`, err.message);
+            triggerFallback();
+        } else {
+            console.error(`❌ [BINANCE] Error en ${label}:`, err.message);
+        }
+    });
+
+    ws.on('close', () => {
+        if (!opened) {
+            triggerFallback();
+        }
+    });
+
     return ws;
 }
 

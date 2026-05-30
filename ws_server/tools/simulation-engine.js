@@ -11,11 +11,12 @@ const REDIS_KEY_TRADES  = 'sim:trades';
 const MAX_TRADE_LOG     = 200;
 
 // Starting USD balance per exchange for fresh simulation
-const INITIAL_USD_PER_EXCHANGE = 5000;
+// 1254.032 * 10 exchanges (excl. RektSwap) = exactly 12540.32 USD total starting capital
+const INITIAL_USD_PER_EXCHANGE = 1254.032;
 
 const EXCHANGES = [
     'Binance', 'Kraken', 'Coinbase', 'OKX', 'Bitfinex',
-    'Bybit', 'Gateio', 'Gemini', 'Bitstamp', 'Kucoin'
+    'Bybit', 'Gateio', 'Gemini', 'Bitstamp', 'Kucoin', 'RektSwap'
 ];
 
 // ─── IN-MEMORY MIRRORS ────────────────────────────────────────────────────────
@@ -29,25 +30,14 @@ let redisRef     = null;
 async function init(redisClient) {
     redisRef = redisClient;
 
-    // Load existing wallets from Redis or create fresh ones
-    const stored = await redisClient.get(REDIS_KEY_WALLETS);
-    if (stored) {
-        try {
-            walletsCache = JSON.parse(stored);
-            console.log('[SIM] Wallets loaded from Redis.');
-        } catch {
-            walletsCache = buildFreshWallets();
-        }
-    } else {
-        walletsCache = buildFreshWallets();
-        await persistWallets();
-        console.log('[SIM] Fresh virtual wallets created.');
-    }
-
-    // Load trade log
-    const storedTrades = await redisClient.lrange(REDIS_KEY_TRADES, 0, MAX_TRADE_LOG - 1);
-    tradesCache = storedTrades.map(t => { try { return JSON.parse(t); } catch { return null; } }).filter(Boolean);
-    console.log(`[SIM] ${tradesCache.length} historical trades loaded.`);
+    // Force fresh simulation state on every server boot
+    walletsCache = buildFreshWallets();
+    await persistWallets();
+    
+    tradesCache = [];
+    await redisClient.del(REDIS_KEY_TRADES);
+    
+    console.log('[SIM] Clean startup: virtual wallets reset and trade history cleared to 0.');
 }
 
 function buildFreshWallets() {
@@ -101,15 +91,27 @@ async function execute(opportunity, rules = {}) {
         return { status: 'REJECTED', reason: 'Insufficient liquidity in virtual wallets' };
     }
 
-    const status = executableVol < volumen ? 'PARTIAL' : 'FILLED';
+    const isRektLoss = (compraEn === 'RektSwap' || vendeEn === 'RektSwap') && Math.random() < 0.20;
+
+    let status = executableVol < volumen ? 'PARTIAL' : 'FILLED';
+    if (isRektLoss) {
+        status = 'REKT';
+    }
 
     // ── Fees ──
     const feeRateBuy  = 0.001; // default taker fee fallback
     const feeRateSell = 0.001;
     const buyCostUSD  = executableVol * precioCompra * (1 + feeRateBuy);
-    const sellGainUSD = executableVol * precioVenta  * (1 - feeRateSell);
+    let sellGainUSD = executableVol * precioVenta  * (1 - feeRateSell);
+
+    if (isRektLoss) {
+        // Force a tiny loss: sell gain is 0.4% to 0.9% lower than buy cost
+        const haircut = 0.991 + (Math.random() * 0.005); // 0.991 to 0.996
+        sellGainUSD = buyCostUSD * haircut;
+    }
+
     const feesUSD     = (executableVol * precioCompra * feeRateBuy) + (executableVol * precioVenta * feeRateSell);
-    const slippageUSD = Math.max(2.50, precioCompra * executableVol * 0.0001);
+    const slippageUSD = precioCompra * executableVol * 0.0001; // 1 bps dynamic slippage
     const netProfitUSD = sellGainUSD - buyCostUSD - slippageUSD;
 
     // ── Update virtual wallets ──
@@ -147,7 +149,11 @@ async function execute(opportunity, rules = {}) {
     // ── Update session state in risk engine ──
     recordTradeResult(netProfitUSD);
 
-    console.log(`[SIM] ${status} | ${compraEn} → ${vendeEn} | Vol: ${executableVol.toFixed(5)} BTC | Net: $${netProfitUSD.toFixed(2)}`);
+    if (isRektLoss) {
+        console.log(`⚠️ [SIM] [REKT LOSS INJECTED] RektSwap txn failed/slipped! Net: $${netProfitUSD.toFixed(2)}`);
+    } else {
+        console.log(`[SIM] ${status} | ${compraEn} → ${vendeEn} | Vol: ${executableVol.toFixed(5)} BTC | Net: $${netProfitUSD.toFixed(2)}`);
+    }
     return trade;
 }
 
@@ -168,6 +174,15 @@ function getPnLSummary() {
     const losses      = tradesCache.filter(t => t.netProfitUSD <= 0).length;
     const winRate     = tradesCache.length > 0 ? (wins / tradesCache.length) * 100 : 0;
 
+    let totalWalletUSD = 0;
+    if (walletsCache) {
+        Object.keys(walletsCache).forEach(ex => {
+            if (ex !== 'RektSwap') {
+                totalWalletUSD += walletsCache[ex].USD;
+            }
+        });
+    }
+
     return {
         totalNetUSD:          parseFloat(totalNet.toFixed(2)),
         totalFeesUSD:         parseFloat(totalFees.toFixed(2)),
@@ -177,6 +192,9 @@ function getPnLSummary() {
         winRatePercent:       parseFloat(winRate.toFixed(1)),
         dailyPnL:             parseFloat(session.dailyPnL.toFixed(2)),
         consecutiveLosses:    session.consecutiveLosses,
+        totalBalanceUSD:      parseFloat(totalWalletUSD.toFixed(2)),
+        blockedTradesCount:   session.blockedTradesCount || 0,
+        totalRiskSavedUSD:    parseFloat((session.totalRiskSavedUSD || 0).toFixed(2)),
     };
 }
 

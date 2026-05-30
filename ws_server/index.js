@@ -6,7 +6,6 @@ const jwt            = require("jsonwebtoken");
 const Redis          = require("ioredis");
 const path           = require("path");
 const orchestrator   = require("./orchestrator");
-const { parsePromptToRules } = require("./tools/strategy-parser");
 const { processPrompt } = require("./tools/ai-agent");
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -21,11 +20,72 @@ const LEGACY_PASSWORD = process.env.LEGACY_PASSWORD;
 const redisPub = new Redis();
 const redisSub = new Redis();
 
+// Use a real http.Server so we can attach REST control routes alongside WebSocket
+const http = require('http');
+const httpServer = http.createServer((req, res) => {
+    // ── CORS pre-flight ──
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+    // GET /api/rules — snapshot of current active rules
+    if (req.method === 'GET' && req.url === '/api/rules') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(orchestrator.getActiveRules()));
+        return;
+    }
+
+    // POST /api/rules — merge partial rules (used by frontend toggle buttons)
+    if (req.method === 'POST' && req.url === '/api/rules') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const partial = JSON.parse(body);
+                orchestrator.setActiveRules(partial);
+                console.log(`${logTime()} 🛡️ [HTTP] Rules updated via REST:`, JSON.stringify(partial));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, rules: orchestrator.getActiveRules() }));
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // GET /api/fees — exchange fee matrix
+    if (req.method === 'GET' && req.url === '/api/fees') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(orchestrator.getExchangeFees()));
+        return;
+    }
+
+    // GET /api/snapshot — unified bootstrap payload (rules + fees + P&L + wallets + trades)
+    // Called once on frontend mount instead of pushing over WebSocket
+    if (req.method === 'GET' && req.url === '/api/snapshot') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            rules:   orchestrator.getActiveRules(),
+            fees:    orchestrator.getExchangeFees(),
+            wallets: orchestrator.getWallets(),
+            trades:  orchestrator.getTradeLog(),
+            pnl:     orchestrator.getFullPnL(),
+        }));
+        return;
+    }
+
+    // Anything else: 404
+    res.writeHead(404); res.end();
+});
+
 const wss = new WebSocket.Server({
-    port: PORT,
-    host: "0.0.0.0",
+    server: httpServer,
     handleProtocols: (protocols) => protocols.has('mqtt') ? 'mqtt' : false
 });
+
+httpServer.listen(PORT, '0.0.0.0');
 
 const clients       = new Map(); // clientId -> ws
 const subscriptions = new Map(); // clientId -> Set(topics)
@@ -223,6 +283,18 @@ wss.on("connection", (ws, req) => {
         if (packet.cmd === "publish") {
             const inTopic   = packet.topic;
             const rawPayload = packet.payload.toString();
+
+            // ── Command: Update active rules directly (expert mode) ──
+            if (inTopic === 'UPDATE_RULES') {
+                try {
+                    const rules = JSON.parse(rawPayload);
+                    console.log(`${logTime()} 🛡️ [DIRECT] Expert update active rules:`, JSON.stringify(rules));
+                    orchestrator.setActiveRules(rules);
+                } catch(e) {
+                    console.error(`${logTime()} ❌ [DIRECT RULES] Parse/apply error:`, e.message);
+                }
+                return;
+            }
 
             // ── Command: Update strategy via natural language prompt ──
             if (inTopic === 'SET_STRATEGY') {
