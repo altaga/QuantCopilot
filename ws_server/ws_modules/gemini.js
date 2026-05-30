@@ -4,21 +4,21 @@ const WebSocket = require('ws');
 const FEE_CONFIG = {
     taker: 0.0040,       // 0.40%
     maker: 0.0020,       // 0.20%
-    withdrawalBTC: 0.0002 // 10 gratis mensuales, luego dinámica
+    withdrawalBTC: 0.0002 // 10 free monthly, then dynamic
 };
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://api.gemini.com/v2/marketdata');
 
     ws.on('open', () => {
-        console.log('✅ [GEMINI] Conectado');
+        console.log('✅ [GEMINI] Connected');
         ws.send(JSON.stringify({ type: 'subscribe', subscriptions: [{ name: 'l2', symbols: ['BTCUSD'] }] }));
     });
 
     ws.on('message', (data) => {
         const j = JSON.parse(data);
         if (j.type === 'l2_updates' && j.changes && j.changes[0]) {
-            // El formato es [side, price, quantity]
+            // The format is [side, price, quantity]
             const [side, price, qty] = j.changes[0];
             const parsedPrice = parseFloat(price);
             const parsedQty = parseFloat(qty);

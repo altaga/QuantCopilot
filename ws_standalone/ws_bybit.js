@@ -3,15 +3,15 @@ const WebSocket = require('ws');
 const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
 
 ws.on('open', () => {
-    console.log('✅ Conectado a Bybit V5 (BTCUSDT)');
+    console.log('✅ Connected to Bybit V5 (BTCUSDT)');
     
-    // 1. Suscripción estricta al Nivel 1 del OrderBook (Best Bid / Best Ask)
+    // 1. Strict subscription to Level 1 of OrderBook (Best Bid / Best Ask)
     ws.send(JSON.stringify({
         op: 'subscribe',
         args: ['orderbook.1.BTCUSDT']
     }));
 
-    // 2. Heartbeat (Ping) obligatorio de Bybit cada 20 segundos
+    // 2. Mandatory Bybit Heartbeat (Ping) every 20 seconds
     setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ op: 'ping' }));
@@ -22,24 +22,24 @@ ws.on('open', () => {
 ws.on('message', (data) => {
     const parsed = JSON.parse(data);
 
-    // Ignorar las respuestas del Ping ("pong")
+    // Ignore Ping responses ("pong")
     if (parsed.op === 'ping' || parsed.ret_msg === 'pong') return;
 
-    // Confirmación de suscripción exitosa
+    // Successful subscription confirmation
     if (parsed.success === true) {
-        console.log(`✅ Suscripción confirmada: ${parsed.ret_msg}`);
+        console.log(`✅ Subscription confirmed: ${parsed.ret_msg}`);
         return;
     }
 
-    // 3. Procesamiento de los datos (Snapshot o Delta)
+    // 3. Data processing (Snapshot or Delta)
     if (parsed.topic === 'orderbook.1.BTCUSDT' && parsed.data) {
         const book = parsed.data;
         
-        // Bybit manda arrays: [['precio', 'cantidad']]
+        // Bybit sends arrays: [['price', 'quantity']]
         const bestBid = (book.b && book.b.length > 0) ? book.b[0][0] : null;
         const bestAsk = (book.a && book.a.length > 0) ? book.a[0][0] : null;
         
-        // A veces manda actualizaciones (deltas) solo de un lado, por eso validamos
+        // Sometimes sends updates (deltas) for only one side, so we validate
         if (bestBid || bestAsk) {
             let logMsg = `[BYBIT] `;
             if (bestBid) logMsg += `Bid: ${bestBid} `;
@@ -47,13 +47,13 @@ ws.on('message', (data) => {
             console.log(logMsg);
         }
     } else if (parsed.ret_msg) {
-        // Por si arroja un error de rate limit o mal formato
-        console.error('⚠️ Mensaje de Bybit:', parsed.ret_msg);
+        // In case it throws a rate limit or malformed error
+        console.error('⚠️ Bybit message:', parsed.ret_msg);
     }
 });
 
-ws.on('error', (err) => console.error('❌ Error de red Bybit:', err));
+ws.on('error', (err) => console.error('❌ Bybit network error:', err));
 
 ws.on('close', (code, reason) => {
-    console.log(`🔌 Bybit desconectado. Código: ${code}`);
+    console.log(`🔌 Bybit disconnected. Code: ${code}`);
 });

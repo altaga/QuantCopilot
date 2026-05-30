@@ -8,32 +8,32 @@ const FEE_CONFIG = {
     withdrawalBTC: 0.0005
 };
 
-// Memoria caché interna
+// Internal cache memory
 let _token        = null;
 let _endpoint     = null;
 let _pingInterval = 20000;
 
-// FASE 1: Pre-flight (REST)
+// PHASE 1: Pre-flight (REST)
 async function load() {
-    console.log('⏳ [KUCOIN] Obteniendo token público vía REST...');
-    // Dependiendo de tu versión de Node, usa node-fetch si fetch no es nativo
+    console.log('⏳ [KUCOIN] Getting public token via REST...');
+    // Depending on your Node version, use node-fetch if fetch is not native
     const res  = await fetch('https://api.kucoin.com/api/v1/bullet-public', { method: 'POST' });
     
-    if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     
     const json = await res.json();
     if (json.code !== '200000' || !json.data) {
-        throw new Error(`Error en respuesta: ${JSON.stringify(json)}`);
+        throw new Error(`Response Error: ${JSON.stringify(json)}`);
     }
     
     _token        = json.data.token;
     _endpoint     = json.data.instanceServers[0].endpoint;
     _pingInterval = json.data.instanceServers[0].pingInterval || 20000;
     
-    console.log('✅ [KUCOIN] Token y Endpoint obtenidos con éxito.');
+    console.log('✅ [KUCOIN] Token and Endpoint successfully obtained.');
 }
 
-// FASE 2: Conexión HFT (WebSocket)
+// PHASE 2: HFT Connection (WebSocket)
 function connect(updateMemory) {
     if (!_token || !_endpoint) {
         throw new Error('[KUCOIN] load() must be called before connect()');
@@ -43,7 +43,7 @@ function connect(updateMemory) {
     let pingTimer = null;
 
     ws.on('open', () => {
-        console.log('✅ [KUCOIN] Conectado (Stream Activo)');
+        console.log('✅ [KUCOIN] Connected (Active Stream)');
         
         ws.send(JSON.stringify({
             id: Date.now(),

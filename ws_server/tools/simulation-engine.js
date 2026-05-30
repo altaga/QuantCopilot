@@ -72,13 +72,12 @@ async function execute(opportunity, rules = {}) {
   if (!walletsCache)
     return { status: "ERROR", reason: "Wallets not initialized" };
 
-  // Support both English and legacy Spanish field names
-  const buyEx = opportunity.buyExchange || opportunity.compraEn;
-  const sellEx = opportunity.sellExchange || opportunity.vendeEn;
-  const buyPr = opportunity.buyPrice || opportunity.precioCompra;
-  const sellPr = opportunity.sellPrice || opportunity.precioVenta;
-  const vol = opportunity.volume || opportunity.volumen;
-  const profit = opportunity.profitUSD || opportunity.profitTotalUSD;
+  const buyEx = opportunity.buyExchange;
+  const sellEx = opportunity.sellExchange;
+  const buyPr = opportunity.buyPrice;
+  const sellPr = opportunity.sellPrice;
+  const vol = opportunity.volume;
+  const profit = opportunity.profitUSD;
   const id = opportunity.id;
 
   const buyWallet = walletsCache[buyEx];

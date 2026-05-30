@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 
-async function iniciarKuCoin() {
-    console.log('Obteniendo Token Público de KuCoin...');
+async function startKuCoin() {
+    console.log('Getting KuCoin Public Token...');
     try {
         const res = await fetch('https://api.kucoin.com/api/v1/bullet-public', { method: 'POST' });
         const json = await res.json();
@@ -12,7 +12,7 @@ async function iniciarKuCoin() {
         const ws = new WebSocket(`${endpoint}?token=${token}`);
 
         ws.on('open', () => {
-            console.log('✅ Conectado a KuCoin (BTC-USDT)');
+            console.log('✅ Connected to KuCoin (BTC-USDT)');
             ws.send(JSON.stringify({
                 id: Date.now(),
                 type: 'subscribe',
@@ -30,8 +30,8 @@ async function iniciarKuCoin() {
             }
         });
     } catch (e) {
-        console.error('❌ Error KuCoin:', e.message);
+        console.error('❌ KuCoin Error:', e.message);
     }
 }
 
-iniciarKuCoin();
+startKuCoin();

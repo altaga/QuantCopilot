@@ -1,43 +1,67 @@
 'use strict';
 const WebSocket = require('ws');
 
-const ENDPOINTS = [
-    'wss://stream.binance.com:9443/ws/btcusdt@bookTicker',
-    'wss://stream.binance.us:9443/ws/btcusd@bookTicker',
-    'wss://data-api.binance.vision/ws/btcusdt@bookTicker'
-];
-let currentIndex = 0;
+const FEE_CONFIG = {
+    taker: 0.0010,       // 0.10%
+    maker: 0.0010,       // 0.10%
+    withdrawalBTC: 0.0003
+};
 
-function connect(updateMemory) {
-    const url = ENDPOINTS[currentIndex];
+const ENDPOINTS = [
+    { url: 'wss://stream.binance.us:9443/ws/btcusd@bookTicker',   label: 'Binance.US' }
+];
+
+function connect(updateMemory, endpointIndex = 0) {
+    if (endpointIndex >= ENDPOINTS.length) {
+        console.error('❌ [BINANCE] All endpoints blocked.');
+        return null;
+    }
+
+    const { url, label } = ENDPOINTS[endpointIndex];
     const ws = new WebSocket(url);
+    let opened = false;
+    let fallbackTriggered = false;
+
+    const triggerFallback = () => {
+        if (fallbackTriggered) return;
+        fallbackTriggered = true;
+        ws.terminate();
+        console.warn(`⚠️ [BINANCE] Connection failed with ${label}. Trying fallback...`);
+        setTimeout(() => connect(updateMemory, endpointIndex + 1), 1000);
+    };
 
     ws.on('open', () => {
-        console.log(`✅ [BINANCE] Conectado a ${url.includes('binance.us') ? 'Binance.US' : url.includes('vision') ? 'Binance Vision' : 'Binance.com'}`);
+        opened = true;
+        console.log(`✅ [BINANCE] Connected via ${label}`);
     });
 
     ws.on('message', (data) => {
-        try {
-            const j = JSON.parse(data);
-            if (j.b && j.a) {
-                updateMemory('Binance', parseFloat(j.b), parseFloat(j.a));
-            }
-        } catch (_err) {
-            // Ignore parsing errors
+        const j = JSON.parse(data);
+        if (j.b && j.a && j.B && j.A) {
+            updateMemory('Binance', parseFloat(j.b), parseFloat(j.B), parseFloat(j.a), parseFloat(j.A));
         }
     });
 
     ws.on('unexpected-response', () => {
-        currentIndex = (currentIndex + 1) % ENDPOINTS.length;
-        ws.terminate();
+        triggerFallback();
     });
 
     ws.on('error', (err) => {
-        console.error(`❌ [BINANCE] Error:`, err.message);
-        currentIndex = (currentIndex + 1) % ENDPOINTS.length;
+        if (!opened) {
+            console.error(`❌ [BINANCE] Connection error in ${label}:`, err.message);
+            triggerFallback();
+        } else {
+            console.error(`❌ [BINANCE] Error in ${label}:`, err.message);
+        }
+    });
+
+    ws.on('close', () => {
+        if (!opened) {
+            triggerFallback();
+        }
     });
 
     return ws;
 }
 
-module.exports = { connect };
+module.exports = { connect, getFees: () => FEE_CONFIG };

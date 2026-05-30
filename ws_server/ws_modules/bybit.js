@@ -11,7 +11,7 @@ function connect(updateMemory) {
     const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
 
     ws.on('open', () => {
-        console.log('✅ [BYBIT] Conectado');
+        console.log('✅ [BYBIT] Connected');
         ws.send(JSON.stringify({ op: 'subscribe', args: ['orderbook.1.BTCUSDT'] }));
         ws.pingInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' }));

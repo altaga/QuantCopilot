@@ -11,7 +11,7 @@ function connect(updateMemory) {
     const ws = new WebSocket('wss://ws.bitstamp.net');
 
     ws.on('open', () => {
-        console.log('✅ [BITSTAMP] Conectado');
+        console.log('✅ [BITSTAMP] Connected');
         ws.send(JSON.stringify({ event: 'bts:subscribe', data: { channel: 'order_book_btcusd' } }));
     });
 

@@ -3,8 +3,8 @@ const WebSocket = require('ws');
 const ws = new WebSocket('wss://ws.kraken.com/v2');
 
 ws.on('open', () => {
-    console.log('✅ Conectado a Kraken (BTC/USD)');
-    // Enviamos el mensaje de suscripción
+    console.log('✅ Connected to Kraken (BTC/USD)');
+    // Send the subscription message
     ws.send(JSON.stringify({
         method: 'subscribe',
         params: {
@@ -22,4 +22,4 @@ ws.on('message', (data) => {
     }
 });
 
-ws.on('error', (err) => console.error('Error Kraken:', err));
+ws.on('error', (err) => console.error('Kraken Error:', err));

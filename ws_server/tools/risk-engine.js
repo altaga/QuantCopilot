@@ -34,12 +34,11 @@ const EXCHANGE_TRUST = {
 function calculateRiskScore(opp, rules, marketData) {
   let score = 100;
 
-  // Support both English and legacy Spanish field names
-  const buyEx = opp.buyExchange || opp.compraEn;
-  const sellEx = opp.sellExchange || opp.vendeEn;
-  const buyPr = opp.buyPrice || opp.precioCompra;
-  const vol = opp.volume || opp.volumen;
-  const profit = opp.profitUSD || opp.profitTotalUSD;
+  const buyEx = opp.buyExchange;
+  const sellEx = opp.sellExchange;
+  const buyPr = opp.buyPrice;
+  const vol = opp.volume;
+  const profit = opp.profitUSD;
 
   const buyTrust = EXCHANGE_TRUST[buyEx] || 50;
   const sellTrust = EXCHANGE_TRUST[sellEx] || 50;
@@ -162,13 +161,13 @@ function evaluate(opportunity, rules = DEFAULT_RULES, marketData = {}) {
   else if (rules.exchangeBlacklist && rules.exchangeBlacklist.length > 0) {
     const bl = rules.exchangeBlacklist.map((e) => e.toLowerCase());
     if (
-      bl.includes(opportunity.compraEn.toLowerCase()) ||
-      bl.includes(opportunity.vendeEn.toLowerCase())
+      bl.includes(opportunity.buyExchange.toLowerCase()) ||
+      bl.includes(opportunity.sellExchange.toLowerCase())
     ) {
       verdict = {
         approved: false,
         reason: "EXCHANGE_BLACKLISTED",
-        detail: `${opportunity.compraEn} or ${opportunity.vendeEn} is blacklisted`,
+        detail: `${opportunity.buyExchange} or ${opportunity.sellExchange} is blacklisted`,
       };
     }
   }
@@ -187,8 +186,8 @@ function evaluate(opportunity, rules = DEFAULT_RULES, marketData = {}) {
   // 6. Minimum spread profitability check
   else if (rules.minSpreadPercent !== null) {
     const spreadPercent =
-      (opportunity.profitTotalUSD /
-        (opportunity.precioCompra * opportunity.volumen)) *
+      (opportunity.profitUSD /
+        (opportunity.buyPrice * opportunity.volume)) *
       100;
     if (spreadPercent < rules.minSpreadPercent) {
       verdict = {

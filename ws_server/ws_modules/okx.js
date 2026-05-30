@@ -14,7 +14,7 @@ function connect(updateMemory) {
     const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
 
     ws.on('open', () => {
-        console.log('✅ [OKX] Conectado');
+        console.log('✅ [OKX] Connected');
         ws.send(JSON.stringify({
             op: 'subscribe',
             args: [{ channel: 'bbo-tbt', instId: 'BTC-USDT' }]
@@ -35,7 +35,7 @@ function connect(updateMemory) {
     });
 
     ws.on('error', (err) => console.error('❌ [OKX] Error:', err.message));
-    ws.on('close', (code) => console.warn(`🔌 [OKX] Desconectado. Código: ${code}`));
+    ws.on('close', (code) => console.warn(`🔌 [OKX] Disconnected. Code: ${code}`));
 
     return ws;
 }

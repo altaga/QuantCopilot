@@ -13,7 +13,7 @@ const ENDPOINTS = [
 
 function connect(updateMemory, endpointIndex = 0) {
     if (endpointIndex >= ENDPOINTS.length) {
-        console.error('❌ [BINANCE] Todos los endpoints bloqueados.');
+        console.error('❌ [BINANCE] All endpoints blocked.');
         return null;
     }
 
@@ -26,13 +26,13 @@ function connect(updateMemory, endpointIndex = 0) {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
         ws.terminate();
-        console.warn(`⚠️ [BINANCE] Conexión fallida con ${label}. Probando fallback...`);
+        console.warn(`⚠️ [BINANCE] Connection failed with ${label}. Trying fallback...`);
         setTimeout(() => connect(updateMemory, endpointIndex + 1), 1000);
     };
 
     ws.on('open', () => {
         opened = true;
-        console.log(`✅ [BINANCE] Conectado vía ${label}`);
+        console.log(`✅ [BINANCE] Connected via ${label}`);
     });
 
     ws.on('message', (data) => {
@@ -48,10 +48,10 @@ function connect(updateMemory, endpointIndex = 0) {
 
     ws.on('error', (err) => {
         if (!opened) {
-            console.error(`❌ [BINANCE] Error de conexión en ${label}:`, err.message);
+            console.error(`❌ [BINANCE] Connection error in ${label}:`, err.message);
             triggerFallback();
         } else {
-            console.error(`❌ [BINANCE] Error en ${label}:`, err.message);
+            console.error(`❌ [BINANCE] Error in ${label}:`, err.message);
         }
     });
 

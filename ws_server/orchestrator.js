@@ -177,13 +177,7 @@ async function detectCrossExchangeArbitrage() {
             sellPrice: bidB,
             volume: executableVolume,
             profitUSD: parseFloat(netProfitTotalUSD.toFixed(4)),
-            // Legacy aliases for backward compatibility (Spanish systems)
-            compraEn: exchangeA,
-            vendeEn: exchangeB,
-            precioCompra: askA,
-            precioVenta: bidB,
-            volumen: executableVolume,
-            profitTotalUSD: parseFloat(netProfitTotalUSD.toFixed(4)),
+            // Legacy aliases removed for full English conversion
             timestamp: Date.now(),
           };
 
@@ -198,8 +192,8 @@ async function detectCrossExchangeArbitrage() {
                 blocked: true,
                 reason: verdict.reason,
                 detail: verdict.detail,
-                compraEn: exchangeA,
-                vendeEn: exchangeB,
+                buyExchange: exchangeA,
+                sellExchange: exchangeB,
                 profit: netProfitTotalUSD.toFixed(4),
                 timestamp: Date.now(),
               }),
@@ -258,7 +252,7 @@ async function start(redisPub) {
         await mod.load();
       } catch (err) {
         console.error(
-          `❌ [${name.toUpperCase()}] Error en Pre-flight:`,
+          `❌ [${name.toUpperCase()}] Pre-flight Error:`,
           err.message,
         );
         setTimeout(() => connectModule(name, mod), 5000);
@@ -271,7 +265,7 @@ async function start(redisPub) {
       ws = mod.connect(updateMemory);
     } catch (err) {
       console.error(
-        `❌ [${name.toUpperCase()}] Error crítico al conectar:`,
+        `❌ [${name.toUpperCase()}] Critical connection error:`,
         err.message,
       );
       return;
@@ -281,7 +275,7 @@ async function start(redisPub) {
 
     ws.on("close", () => {
       console.warn(
-        `⚠️ [${name.toUpperCase()}] Desconectado. Reconectando en 5s...`,
+        `⚠️ [${name.toUpperCase()}] Disconnected. Reconnecting in 5s...`,
       );
       setTimeout(() => connectModule(name, mod), 5000);
     });
@@ -290,10 +284,10 @@ async function start(redisPub) {
   await Promise.all(modules.map(({ name, mod }) => connectModule(name, mod)));
 
   console.log(
-    `✅ [CCM] Conexiones y Fees establecidos. Publicando ticks en "${TOPIC}" a ${PUBLISH_HZ} Hz.\n`,
+    `✅ [CCM] Connections and Fees established. Publishing ticks on "${TOPIC}" at ${PUBLISH_HZ} Hz.\n`,
   );
   console.log(
-    `🛡️  [RISK] Motor de Riesgo activo | Reglas: ${JSON.stringify(activeRules)}`,
+    `🛡️  [RISK] Risk Engine active | Rules: ${JSON.stringify(activeRules)}`,
   );
 
   // ── HFT TICK PUBLISH LOOP ───────────────────────────────────────────────

@@ -11,7 +11,7 @@ function connect(updateMemory) {
     const ws = new WebSocket('wss://ws.kraken.com/v2');
 
     ws.on('open', () => {
-        console.log('✅ [KRAKEN] Conectado');
+        console.log('✅ [KRAKEN] Connected');
         ws.send(JSON.stringify({ method: 'subscribe', params: { channel: 'ticker', symbol: ['BTC/USD'] } }));
     });
 

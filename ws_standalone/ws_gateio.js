@@ -3,7 +3,7 @@ const WebSocket = require('ws');
 const ws = new WebSocket('wss://api.gateio.ws/ws/v4/');
 
 ws.on('open', () => {
-    console.log('✅ Conectado a Gate.io (BTC_USDT)');
+    console.log('✅ Connected to Gate.io (BTC_USDT)');
     ws.send(JSON.stringify({
         time: Math.floor(Date.now() / 1000),
         channel: 'spot.book_ticker',

@@ -4,14 +4,14 @@ const WebSocket = require('ws');
 const FEE_CONFIG = {
     taker: 0.0060,       // 0.60%
     maker: 0.0040,       // 0.40%
-    withdrawalBTC: 0.0005 // Dinámica, estimación segura
+    withdrawalBTC: 0.0005 // Dynamic, safe estimation
 };
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://advanced-trade-ws.coinbase.com');
 
     ws.on('open', () => {
-        console.log('✅ [COINBASE] Conectado');
+        console.log('✅ [COINBASE] Connected');
         ws.send(JSON.stringify({ type: 'subscribe', product_ids: ['BTC-USD'], channel: 'ticker' }));
     });
 

@@ -16,7 +16,7 @@ const SECRET          = process.env.WSS_SECRET;
 const LEGACY_USERNAME = process.env.LEGACY_USERNAME;
 const LEGACY_PASSWORD = process.env.LEGACY_PASSWORD;
 
-// Redis maneja el escalado horizontal entre tus procesos de AWS
+// Redis handles horizontal scaling across your AWS processes
 const redisPub = new Redis();
 const redisSub = new Redis();
 
@@ -92,13 +92,13 @@ const subscriptions = new Map(); // clientId -> Set(topics)
 
 const logTime = () => `[${new Date().toISOString().replace("T", " ").split(".")[0]}]`;
 
-// --- CONFIGURACIÓN HFT BACKPRESSURE Y CACHÉ HISTÓRICO ---
+// --- HFT BACKPRESSURE AND HISTORICAL CACHE CONFIGURATION ---
 const MAX_BUFFER_SIZE = 50 * 1024; 
-const MAX_HISTORY     = 50;        // 📊 Límite de valores históricos por exchange/tópico
-const historyCache    = new Map(); // 📊 Diccionario en RAM: topic -> array de 50 valores
+const MAX_HISTORY     = 50;        // 📊 Limit of historical values per exchange/topic
+const historyCache    = new Map(); // 📊 RAM Dictionary: topic -> array of 50 values
 
 // --- 2. GLOBAL GRID SYNC ---
-// Escucha la red de Redis Pub/Sub y distribuye de inmediato a los WebSockets locales.
+// Listens to the Redis Pub/Sub network and distributes immediately to local WebSockets.
 redisSub.psubscribe("*");
 redisSub.on("pmessage", (pattern, channel, message) => {
     let data;
@@ -110,31 +110,31 @@ redisSub.on("pmessage", (pattern, channel, message) => {
 
     const payloadToSend = data.payload || message;
 
-    // 📝 GUARDAR EN EL HISTÓRICO EN MEMORIA (RAM)
+    // 📝 SAVE IN MEMORY HISTORY (RAM)
     if (!historyCache.has(channel)) {
         historyCache.set(channel, []);
     }
     const topicHistory = historyCache.get(channel);
     
-    // Convertir a objeto JSON si es posible para un formato limpio
+    // Convert to JSON object if possible for clean format
     let parsedPayload;
     try { parsedPayload = JSON.parse(payloadToSend); } 
     catch { parsedPayload = payloadToSend; }
 
     topicHistory.push(parsedPayload);
     
-    // Mantener solo los últimos MAX_HISTORY elementos (desplazamiento circular)
+    // Keep only the last MAX_HISTORY elements (circular buffer)
     if (topicHistory.length > MAX_HISTORY) {
         topicHistory.shift(); 
     }
 
-    // DISTRIBUIR A CLIENTES WS
+    // DISTRIBUTE TO WS CLIENTS
     clients.forEach((ws) => {
         const clientSubs = subscriptions.get(ws.clientId);
         
         if (clientSubs && clientSubs.has(channel)) {
             
-            // 🛡️ EL ESCUDO DE CONTRA-PRESIÓN (BACKPRESSURE SHIELD) 🛡️
+            // 🛡️ THE BACKPRESSURE SHIELD 🛡️
             if (ws.bufferedAmount > MAX_BUFFER_SIZE) {
                 return; 
             }
@@ -150,25 +150,25 @@ redisSub.on("pmessage", (pattern, channel, message) => {
     });
 });
 
-// --- 📊 FUNCIÓN ESPECIAL: ENVIAR HISTÓRICO ---
-// Envía los 50 valores almacenados de un solo golpe para pintar gráficos
+// --- 📊 SPECIAL FUNCTION: SEND HISTORY ---
+// Sends the 50 stored values at once to draw charts
 function sendHistoryToClient(ws, topic) {
     if (historyCache.has(topic)) {
         const historyArray = historyCache.get(topic);
         if (historyArray.length > 0) {
             ws.send(mqtt.generate({
                 cmd:     'publish',
-                topic:   `${topic}/history`, // Sub-canal especial para el FrontEnd
+                topic:   `${topic}/history`, // Special sub-channel for the FrontEnd
                 payload: JSON.stringify(historyArray),
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 📊 [HISTORY] Enviados ${historyArray.length} valores de ${topic} a ${ws.clientId}`);
+            console.log(`${logTime()} 📊 [HISTORY] Sent ${historyArray.length} values of ${topic} to ${ws.clientId}`);
         }
     }
 }
 
-// --- 💸 FUNCIÓN ESPECIAL: ENVIAR COMISIONES + SNAPSHOT INICIAL ---
+// --- 💸 SPECIAL FUNCTION: SEND FEES + INITIAL SNAPSHOT ---
 function sendFeesToClient(ws, topic) {
     if (topic === 'market/btc/ticker') {
         if (orchestrator && typeof orchestrator.getExchangeFees === 'function') {
@@ -180,7 +180,7 @@ function sendFeesToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 💸 [FEES] Diccionario de comisiones enviado a ${ws.clientId}`);
+            console.log(`${logTime()} 💸 [FEES] Fees dictionary sent to ${ws.clientId}`);
         }
 
         // Push active rules snapshot to new client
@@ -207,23 +207,23 @@ function sendFeesToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 📊 [SNAPSHOT] P&L + wallets enviados a ${ws.clientId}`);
+            console.log(`${logTime()} 📊 [SNAPSHOT] P&L + wallets sent to ${ws.clientId}`);
         }
     }
 }
 
-// --- 3. LÓGICA CENTRAL DEL BROKER ---
+// --- 3. CORE BROKER LOGIC ---
 wss.on("connection", (ws, req) => {
     const parser = mqtt.parser();
     ws.isAuthorized = false;
     const ip = req.socket.remoteAddress;
 
-    // 🚀 CRÍTICO HFT: Desactiva el algoritmo de Nagle. 
+    // 🚀 HFT CRITICAL: Disable Nagle's algorithm. 
     req.socket.setNoDelay(true); 
 
     parser.on("packet", (packet) => {
 
-        // A. AUTENTICACIÓN
+        // A. AUTHENTICATION
         if (packet.cmd === "connect") {
             const user = packet.username;
             const pass = packet.password ? packet.password.toString() : null;
@@ -260,7 +260,7 @@ wss.on("connection", (ws, req) => {
 
         if (!ws.isAuthorized) return ws.terminate();
 
-        // B. APERTURA DE SUSCRIPCIÓN
+        // B. SUBSCRIPTION OPENING
         if (packet.cmd === "subscribe") {
             packet.subscriptions.forEach((sub) => {
                 subscriptions.get(ws.clientId).add(sub.topic);
@@ -272,14 +272,14 @@ wss.on("connection", (ws, req) => {
                 granted:   packet.subscriptions.map(s => s.qos)
             }));
 
-            // 🚀 DISPARAR EL HISTÓRICO Y LOS FEES AL FRONTEND
+            // 🚀 TRIGGER HISTORY AND FEES TO FRONTEND
             packet.subscriptions.forEach((sub) => {
                 sendHistoryToClient(ws, sub.topic);
-                sendFeesToClient(ws, sub.topic); // Llamada inyectada
+                sendFeesToClient(ws, sub.topic); // Injected call
             });
         }
 
-        // C. RECEPCIÓN DE PUBLICACIÓN (Client → servidor)
+        // C. PUBLICATION RECEPTION (Client → server)
         if (packet.cmd === "publish") {
             const inTopic   = packet.topic;
             const rawPayload = packet.payload.toString();
@@ -346,7 +346,7 @@ wss.on("connection", (ws, req) => {
             }));
         }
 
-        // D. RESPUESTA DE PING (Heartbeat MQTT para mantener el canal abierto)
+        // D. PING RESPONSE (MQTT Heartbeat to keep channel open)
         if (packet.cmd === "pingreq") {
             ws.send(mqtt.generate({ cmd: "pingresp" }));
         }
@@ -365,16 +365,16 @@ wss.on("connection", (ws, req) => {
     ws.on("error", () => ws.terminate());
 });
 
-console.log(`\n🚀 [OPEN ENTERPRISE GRID] Online en PUERTO ${PORT}`);
-console.log(`🛡️  HFT Backpressure Shield Activo (Límite máximo: ${MAX_BUFFER_SIZE / 1024} KB)`);
-console.log(`📊  Caché Histórica Activa: Últimos ${MAX_HISTORY} valores por canal`);
-console.log(`🔓 Modo: Tópicos sin restricciones | Sincronización: Redis Habilitado\n`);
+console.log(`\n🚀 [OPEN ENTERPRISE GRID] Online on PORT ${PORT}`);
+console.log(`🛡️  HFT Backpressure Shield Active (Max limit: ${MAX_BUFFER_SIZE / 1024} KB)`);
+console.log(`📊  Historical Cache Active: Last ${MAX_HISTORY} values per channel`);
+console.log(`🔓 Mode: Unrestricted topics | Sync: Redis Enabled\n`);
 
-// --- 4. ARRANQUE DEL ORQUESTADOR DE PRECIOS ---
+// --- 4. START PRICE ORCHESTRATOR ---
 if (orchestrator && orchestrator.start) {
     orchestrator.start(redisPub).catch((err) =>
-        console.error('❌ [ORCHESTRATOR] Error Crítico Fatal:', err.message)
+        console.error('❌ [ORCHESTRATOR] Fatal Critical Error:', err.message)
     );
 } else {
-    console.warn("⚠️ [WARN] El módulo 'orchestrator.js' no expone la función .start().");
+    console.warn("⚠️ [WARN] Module 'orchestrator.js' does not expose the .start() function.");
 }
