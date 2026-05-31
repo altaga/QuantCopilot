@@ -295,8 +295,7 @@ Es una plataforma de supervisión cuantitativa diseñada para cerrar la brecha e
 
 Mediante una arquitectura orientada a eventos, un motor de riesgo determinístico y una capa de supervisión impulsada por IA, buscamos demostrar que el futuro del trading automatizado no depende únicamente de ejecutar más rápido, sino de ejecutar de forma más inteligente.
 
-
-## Auditoría y Acceso a la Plataforma (Entorno Live)
+## Instrucciones de instalación y Acceso a la Plataforma (Entorno Live)
 
 El simulador algorítmico y dashboard de monitoreo operan actualmente en producción.
 
@@ -312,11 +311,52 @@ El principio rector de la arquitectura es proteger los recursos computacionales 
 
 > **Nota para la Demostración (El Simulador RektSwap):** El arbitraje real inter-exchange ocurre esporádicamente. Para evitar que el jurado espere frente a una pantalla estática, el sistema integra **RektSwap**, un exchange fantasma (Nodo 11). RektSwap lee pasivamente el precio en tiempo real de Binance y le inyecta una desviación algorítmica (ruido/exageración). Esto genera *spreads* artificiales de forma continua que "despiertan" al motor $O(N^2)$ y obligan al Risk Engine a reaccionar, evaluar y bloquear operaciones en vivo. Es una herramienta de estrés diseñada puramente para auditar el sistema durante la presentación. Este puede apagarse y encenderse desde el panel de control.
 
-<img src="./Images/rektswap.png" alt="Grafico de RektSwap">
+<img src="./Images/rektswap.png" alt="Gráfico de RektSwap">
 
 ---
 
-## Arquitectura del Repositorio y Pruebas Locales
+## Capturas de pantalla de la plataforma:
+
+### 1. Dashboard Principal (Live Overview)
+*[🔗 Abrir en la App (Dashboard)](https://quantcopilot.expo.app/main)*
+<a href="https://quantcopilot.expo.app/main" target="_blank"><img src="./Images/screen01.png" alt="Live Dashboard" width="800"></a>
+
+El panel principal de control, donde se monitorea la salud general del sistema HFT en tiempo real. 
+- **Métricas Globales:** Visualiza el PnL estimado, la tasa de éxito de las operaciones (Win Rate), los trades ejecutados y el nivel actual de "Drawdown".
+- **Risk Saved:** Muestra el capital que el Risk Engine protegió al bloquear trades que resultaron ser falsos positivos de rentabilidad o tenían riesgo de slippage alto.
+- **Exposición por Activo:** Gráfico de distribución del portafolio y los assets operados en el entorno.
+- **Oportunidades en Vivo:** Una tabla de actualización constante que detalla la detección instantánea de spreads netos cruzando las plataformas conectadas.
+
+### 2. Monitor de Ticker y Profundidad del Mercado
+*[🔗 Abrir en la App (Ticker BTC/USD)](https://quantcopilot.expo.app/btcusd)*
+<a href="https://quantcopilot.expo.app/btcusd" target="_blank"><img src="./Images/screen02.png" alt="BTC/USD Ticker" width="800"></a>
+
+Una vista detallada por par de trading, combinando telemetría de red y estado de los libros de órdenes.
+- **Precio VWAP (True Price):** Cálculo del precio real ponderado por volumen frente al precio nominal de los exchanges.
+- **Exchange Monitor:** Una tabla ultrarrápida que contrasta el Bid/Ask actual en todas las casas de cambio (exchanges) configuradas, revelando las asimetrías de liquidez instantáneamente.
+- **Gráfico Integrado:** Gráfico en tiempo real utilizando Lightweight Charts para máxima fluidez y eficiencia de renderizado sin bloquear el hilo principal del navegador.
+
+### 3. Consola de IA y Estrategia (Supervisión Humano-IA)
+*[🔗 Abrir en la App (Accesible desde cualquier vista)](https://quantcopilot.expo.app/btcusd)*
+<a href="https://quantcopilot.expo.app/btcusd" target="_blank"><img src="./Images/screen03.png" alt="AI Strategy Console" width="800"></a>
+
+La interfaz a través de la cual el usuario dicta los parámetros operativos del motor HFT mediante Inteligencia Artificial, sin necesidad de reprogramar el sistema.
+- **Input de Lenguaje Natural (NLP):** Permite ingresar instrucciones de riesgo de forma coloquial (ej. *"Look at our win rate. If it's below 50%, tighten spreads"*). La IA evalúa y traduce la intención a parámetros técnicos usando AWS Bedrock.
+- **Panel de Reglas Activas:** Un cuadro de mandos que expone las variables operativas en memoria: `minSpreadPercent`, `maxExposureUSD`, `maxDailyLossUSD`, rechazo de volatilidad y el *Kill Switch*.
+- **Control Táctico y RektSwap:** Botones de acceso rápido para forzar perfiles conservadores o habilitar/deshabilitar *RektSwap* (el simulador algorítmico de estrés).
+
+### 4. Profundidad Matemática y Registro de Ejecución (Execution Log)
+*[🔗 Abrir en la App (Sección Ticker)](https://quantcopilot.expo.app/btcusd)*
+<a href="https://quantcopilot.expo.app/btcusd" target="_blank"><img src="./Images/screen04.png" alt="Opportunity Detail" width="800"></a>
+
+La "caja negra" de las operaciones expuesta con total transparencia.
+- **Desglose de Costos Ocultos:** Por cada oportunidad de arbitraje, se calcula con precisión milimétrica el spread bruto, y se le descuentan dinámicamente las comisiones (Taker Fees) y el slippage estimado basado en la profundidad de la orden (L2).
+- **Rentabilidad Neta y Puntaje de Riesgo:** La interfaz revela el margen de ganancia estrictamente neto ($Net Profit %$). Cada cruce recibe un *Risk-Adjusted Score* para auditar por qué una operación fue autorizada o rechazada.
+- **Log de Ejecución en Vivo:** Registro detallado de las transacciones FOK/IOC emparejadas simultáneamente, mostrando los volúmenes, estado de ejecución y PnL generado en tiempo real.
+
+---
+
+## Instrucciones de instalación y Pruebas Locales
 
 El proyecto está diseñado de forma modular para permitir pruebas aisladas de cada componente crítico antes de integrarlos al flujo de producción completo. A continuación, se detalla la estructura del código fuente y cómo ejecutar los entornos localmente.
 
