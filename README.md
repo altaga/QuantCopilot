@@ -87,7 +87,7 @@ Codificar combinaciones cruzadas mediante condicionales estáticos crea árboles
 
 ---
 
-## Motor de Riesgo (Risk Engine) y Circuit Breakers
+## Risk Engine y Circuit Breakers
 
 En HFT, detectar el spread es solo el primer paso; el reto real es mitigar el riesgo de ejecución antes de que la liquidez desaparezca. El Risk Engine actúa como el sistema de validación para las decisiones del Orquestador.
 
