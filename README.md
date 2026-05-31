@@ -119,7 +119,7 @@ Su función es traducir instrucciones humanas a parámetros cuantitativos que so
 
 ---
 
-## Arquitectura de la Solución
+## Stack Tecnológico
 
 La arquitectura está diseñada para garantizar la máxima velocidad en el flujo de datos mediante una estricta separación de responsabilidades. Desplegado sobre infraestructura **AWS**, el clúster del servidor se dedica exclusivamente a la ingesta cruda desde los exchanges y al procesamiento matemático intensivo. Para no entorpecer este motor HFT, el puente de comunicación utiliza **Redis** como bus de alta velocidad, distribuyendo la información asincrónicamente a los clientes mediante una API REST y un broker MQTT sobre WebSockets de frecuencia limitada (*throttled*).
 
