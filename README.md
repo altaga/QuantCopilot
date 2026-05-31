@@ -1,6 +1,6 @@
 # QuantCopilot
 
-### Copiloto Inteligente de Riesgo para Arbitraje de Criptomonedas de Alta Frecuencia
+### Description: Copiloto Inteligente de Riesgo para Arbitraje de Criptomonedas de Alta Frecuencia
 
 QuantCopilot es una plataforma de supervisión cuantitativa diseñada para identificar, evaluar y gestionar oportunidades de arbitraje entre múltiples exchanges en tiempo real.
 
