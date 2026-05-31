@@ -8,11 +8,33 @@
 * **App Code:** [./QuantCopilot/](./QuantCopilot/)
 
 ## Introducción
-// To be done
 
-## El Problema
-// To be done
+El arbitraje de Bitcoin y otros assets digitales se ha vuelto una estrategia muy popular para quienes buscan aprovechar las diferencias de precio que surgen de forma natural entre distintos exchanges. En esencia, la idea parece sencilla: comprar barato en un mercado y vender más caro en otro, casi al instante. Sin embargo, lo que en el papel parece una forma "fácil" de ganar dinero gracias a que estos mercados no están centralizados ni sincronizados, en la práctica se convierte en un juego mucho más exigente que requiere precisión, rapidez y una gestión de riesgos muy pulida.
 
+### Teoría vs. Realidad
+
+**Teoría (El escenario ideal):**
+```mermaid
+graph LR
+    A[Exchange A: Comprar 1 BTC a $60,000] -->|Spread Perfecto| B[Exchange B: Vender 1 BTC a $60,050]
+    B --> C((Ganancia Libre de Riesgo: +$50))
+    style C fill:#1e4620,stroke:#2ea043,color:#fff,stroke-width:2px
+```
+
+**Realidad (El desafío técnico):**
+```mermaid
+graph TD
+    A[Exchange A: Señal de Compra a $60,000] -->|1. Falta liquidez L2| B[Slippage: Compra real a $60,015]
+    B -->|2. Latencia de red / Ejecución| C[Exchange B: Señal de Venta a $60,050]
+    C -->|3. El precio ya se movió| D[Volatilidad: Venta real a $60,010]
+    D -->|4. Costos Ocultos| E[Comisiones de Exchange: -$15]
+    E --> F((Resultado Final: -$20 de Pérdida Neta))
+    style F fill:#4a0f16,stroke:#f85149,color:#fff,stroke-width:2px
+```
+
+## Problema
+
+El verdadero problema es que, en el día a día, el margen de beneficio es tan pequeño que cualquier imprevisto puede convertir una operación ganadora en una pérdida. Entre las comisiones que cobran las plataformas, los tiempos de espera para que las transferencias se confirmen en la red y la volatilidad propia del mercado, el escenario cambia en cuestión de segundos. A menudo, cuando intentas completar la operación, el precio ya se movió (lo que llamamos slippage), o te das cuenta de que no hay suficiente liquidez para cerrar la venta, dejándote atrapado con el activo en un momento inoportuno. Al final, no se trata solo de encontrar una diferencia de precio, sino de luchar contra un reloj y unos costes operativos que hacen que esta actividad sea mucho más arriesgada de lo que parece a simple vista.
 ---
 
 ## Arquitectura de la Solución
