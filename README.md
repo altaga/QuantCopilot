@@ -19,8 +19,8 @@ Para entender rápidamente el funcionamiento y ver el sistema HFT en acción, te
 
 ### 📌 Accesos Directos
 * 🌐 **Aplicación en Producción:** [https://quantcopilot.expo.app/](https://quantcopilot.expo.app/)
-* ⚙️ **WebServer Code (Backend HFT):** [Explorar `./ws_server/`](./ws_server/)
-* 🖥️ **App Code (Frontend React):** [Explorar `./QuantCopilot/`](./QuantCopilot/)
+* ⚙️ **WebServer Code (Backend HFT):** [Explorar ws_server](./ws_server/)
+* 🖥️ **App Code (Frontend React):** [Explorar QuantCopilot](./QuantCopilot/)
 
 ## Idea Central
 
