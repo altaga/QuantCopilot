@@ -1,3 +1,4 @@
+
 import { Image } from "expo-image";
 import { useNavigation } from "expo-router";
 import { useContext, useEffect } from "react";
@@ -11,6 +12,7 @@ export default function SplashLoading() {
   const GlobalStyles = createGlobalStyles();
   const navigation = useNavigation();
 
+  // disparamos el effect al montar o cambiar dependencias
   useEffect(() => {
     if (context && context.value && context.value.starter) {
       navigation.navigate("(screens)/main");

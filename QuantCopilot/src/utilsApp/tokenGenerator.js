@@ -1,3 +1,4 @@
+
 import { remoteLog } from "./remoteLog";
 
 /**
@@ -11,7 +12,9 @@ import { remoteLog } from "./remoteLog";
  */
 
 async function getTokenFromServer() {
+  // bloque de seguridad por si truena la logica
   try {
+    // pegamos al endpoint via rest para traer data inicial
     const res = await fetch("/api/secure/token");
     if (!res.ok) {
       remoteLog(`Server token fetch failed: ${res.status}`, "ERROR", "TOKEN");

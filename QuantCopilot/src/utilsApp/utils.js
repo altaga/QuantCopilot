@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dimensions, PixelRatio, Platform } from "react-native";
 
@@ -5,12 +6,14 @@ import { Dimensions, PixelRatio, Platform } from "react-native";
 let AsyncStorage = null;
 let SecureStore = null;
 
+// bloque de seguridad por si truena la logica
 try {
   AsyncStorage = require("@react-native-async-storage/async-storage").default;
 } catch (_e) {
   // AsyncStorage not installed
 }
 
+// bloque de seguridad por si truena la logica
 try {
   SecureStore = require("expo-secure-store");
 } catch (_e) {
@@ -67,9 +70,11 @@ const storageDriver = {
 };
 
 export async function getAsyncStorageValue(label, storage = "General") {
+  // bloque de seguridad por si truena la logica
   try {
     const session = await storageDriver.getItem(storage);
     if (!session) return null;
+    // parseamos el payload (asumimos que viene limpio pero cuidadito)
     const parsed = JSON.parse(session);
     if (parsed && label in parsed) {
       return parsed[label];
@@ -81,8 +86,10 @@ export async function getAsyncStorageValue(label, storage = "General") {
 }
 
 export async function setAsyncStorageValue(value, storage = "General") {
+  // bloque de seguridad por si truena la logica
   try {
     const session = await storageDriver.getItem(storage);
+    // parseamos el payload (asumimos que viene limpio pero cuidadito)
     const prev = session ? JSON.parse(session) : {};
     await storageDriver.setItem(
       storage,
@@ -97,10 +104,12 @@ export async function setAsyncStorageValue(value, storage = "General") {
 }
 
 export async function getEncryptedStorageValue(label, storage = "General") {
+  // bloque de seguridad por si truena la logica
   try {
     if (SecureStore) {
       const session = await SecureStore.getItemAsync(storage);
       if (session) {
+        // parseamos el payload (asumimos que viene limpio pero cuidadito)
         const parsed = JSON.parse(session);
         if (parsed && label in parsed) {
           return parsed[label];
@@ -115,9 +124,11 @@ export async function getEncryptedStorageValue(label, storage = "General") {
 }
 
 export async function setEncryptedStorageValue(value, storage = "General") {
+  // bloque de seguridad por si truena la logica
   try {
     if (SecureStore) {
       const session = await SecureStore.getItemAsync(storage);
+      // parseamos el payload (asumimos que viene limpio pero cuidadito)
       const prev = session ? JSON.parse(session) : {};
       await SecureStore.setItemAsync(
         storage,
@@ -136,6 +147,7 @@ export async function setEncryptedStorageValue(value, storage = "General") {
 }
 
 export async function nukeStorage(storage = "General") {
+  // bloque de seguridad por si truena la logica
   try {
     await storageDriver.clear();
     await clearSecureStorage(storage);
@@ -145,6 +157,7 @@ export async function nukeStorage(storage = "General") {
 }
 
 export async function clearSecureStorage(storage) {
+  // bloque de seguridad por si truena la logica
   try {
     if (SecureStore) {
       await SecureStore.deleteItemAsync(storage);
@@ -182,6 +195,7 @@ export const normalizeFontSize = (size) => {
 };
 
 export function useStateAsync(initialValue) {
+  // definimos estado local para la ui
   const [state, setState] = useState(initialValue);
   const resolverRef = useRef(null);
 
@@ -192,6 +206,7 @@ export function useStateAsync(initialValue) {
     });
   }, []);
 
+  // disparamos el effect al montar o cambiar dependencias
   useEffect(() => {
     if (resolverRef.current) {
       resolverRef.current(state);

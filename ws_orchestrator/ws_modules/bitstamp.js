@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -8,6 +9,7 @@ const FEE_CONFIG = {
 };
 
 function connect(updateMemory) {
+    // pegamos contra el socket del exchange
     const ws = new WebSocket('wss://ws.bitstamp.net');
     let isReconnecting = false;
 
@@ -15,17 +17,20 @@ function connect(updateMemory) {
         if (isReconnecting) return;
         isReconnecting = true;
         updateMemory('Bitstamp', 0, 0, 0, 0);
-        console.warn('⚠️ [BITSTAMP] Desconectado. Reconectando en 5s...');
+        console.warn(' bitstamp:  Desconectado. Reconectando en 5s...');
         setTimeout(() => connect(updateMemory), 5000);
     };
 
     ws.on('open', () => {
-        console.log('✅ [BITSTAMP] Connected');
+        console.log(' bitstamp:  Connected');
         ws.send(JSON.stringify({ event: 'bts:subscribe', data: { channel: 'order_book_btcusd' } }));
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (j.event === 'data' && j.data && j.data.bids && j.data.asks) {
                 updateMemory('Bitstamp', 
@@ -37,7 +42,7 @@ function connect(updateMemory) {
     });
 
     ws.on('error', (err) => {
-        console.error('❌ [BITSTAMP] Error:', err.message);
+        console.error(' bitstamp:  Error:', err.message);
         ws.terminate();
     });
 
@@ -46,4 +51,5 @@ function connect(updateMemory) {
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

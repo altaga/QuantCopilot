@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -8,18 +9,28 @@ const FEE_CONFIG = {
 };
 
 function connect(updateMemory) {
+    // pegamos contra el socket del exchange
     const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
 
     ws.on('open', () => {
-        console.log('✅ [BYBIT] Connected');
+        console.log(' bybit:  Connected');
         ws.send(JSON.stringify({ op: 'subscribe', args: ['orderbook.1.BTCUSDT'] }));
         ws.pingInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' }));
         }, 20000);
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (j.ret_msg === 'pong' || j.op === 'ping') return;
             if (j.data) {
@@ -35,8 +46,9 @@ function connect(updateMemory) {
     });
 
     ws.on('close', () => clearInterval(ws.pingInterval));
-    ws.on('error', (err) => console.error('❌ [BYBIT] Error:', err.message));
+    ws.on('error', (err) => console.error(' bybit:  Error:', err.message));
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

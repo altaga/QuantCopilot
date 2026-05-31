@@ -1,3 +1,4 @@
+
 'use strict';
 
 const WebSocket      = require("ws");
@@ -18,6 +19,7 @@ const LEGACY_PASSWORD = process.env.LEGACY_PASSWORD;
 
 // Redis handles horizontal scaling across your AWS processes
 const redisPub = new Redis();
+// abrimos conexion con redis para el pubsub
 const redisSub = new Redis();
 
 // Use a real http.Server so we can attach REST control routes alongside WebSocket
@@ -41,10 +43,12 @@ const httpServer = http.createServer((req, res) => {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
+            // bloque de seguridad por si truena la logica
             try {
+                // parseamos el payload (asumimos que viene limpio pero cuidadito)
                 const partial = JSON.parse(body);
                 orchestrator.setActiveRules(partial);
-                console.log(`${logTime()} 🛡️ [HTTP] Rules updated via REST:`, JSON.stringify(partial));
+                console.log(`${logTime()}  http:  Rules updated via REST:`, JSON.stringify(partial));
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ ok: true, rules: orchestrator.getActiveRules() }));
             } catch (e) {
@@ -80,6 +84,7 @@ const httpServer = http.createServer((req, res) => {
     res.writeHead(404); res.end();
 });
 
+// levantamos el server de websockets local
 const wss = new WebSocket.Server({
     server: httpServer,
     handleProtocols: (protocols) => protocols.has('mqtt') ? 'mqtt' : false
@@ -102,7 +107,9 @@ const historyCache    = new Map(); // 📊 RAM Dictionary: topic -> array of 50 
 redisSub.psubscribe("*");
 redisSub.on("pmessage", (pattern, channel, message) => {
     let data;
+    // bloque de seguridad por si truena la logica
     try {
+        // parseamos el payload (asumimos que viene limpio pero cuidadito)
         data = JSON.parse(message);
     } catch (e) {
         data = { payload: message }; 
@@ -118,6 +125,7 @@ redisSub.on("pmessage", (pattern, channel, message) => {
     
     // Convert to JSON object if possible for clean format
     let parsedPayload;
+    // parseamos el payload (asumimos que viene limpio pero cuidadito)
     try { parsedPayload = JSON.parse(payloadToSend); } 
     catch { parsedPayload = payloadToSend; }
 
@@ -163,7 +171,7 @@ function sendHistoryToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 📊 [HISTORY] Sent ${historyArray.length} values of ${topic} to ${ws.clientId}`);
+            console.log(`${logTime()}  history:  Sent ${historyArray.length} values of ${topic} to ${ws.clientId}`);
         }
     }
 }
@@ -180,7 +188,7 @@ function sendFeesToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 💸 [FEES] Fees dictionary sent to ${ws.clientId}`);
+            console.log(`${logTime()} � fees:  Fees dictionary sent to ${ws.clientId}`);
         }
 
         // Push active rules snapshot to new client
@@ -207,7 +215,7 @@ function sendFeesToClient(ws, topic) {
                 qos:     0,
                 retain:  false
             }));
-            console.log(`${logTime()} 📊 [SNAPSHOT] P&L + wallets sent to ${ws.clientId}`);
+            console.log(`${logTime()}  snapshot:  P&L + wallets sent to ${ws.clientId}`);
         }
     }
 }
@@ -233,16 +241,17 @@ wss.on("connection", (ws, req) => {
             if (user === LEGACY_USERNAME && pass === LEGACY_PASSWORD) {
                 ws.clientId    = packet.clientId || `legacy_${Math.random().toString(16).slice(2, 6)}`;
                 authenticated  = true;
-                console.log(`${logTime()} 🔓 [AUTH - LEGACY] ${ws.clientId} | IP: ${ip}`);
+                console.log(`${logTime()}  [AUTH - LEGACY] ${ws.clientId} | IP: ${ip}`);
             } else {
+                // bloque de seguridad por si truena la logica
                 try {
                     const decoded  = jwt.verify(pass, SECRET);
                     ws.clientId    = packet.clientId || `jwt_${Math.random().toString(16).slice(2, 6)}`;
                     ws.user        = decoded;
                     authenticated  = true;
-                    console.log(`${logTime()} ✅ [AUTH - JWT] ${ws.clientId} | User: ${decoded.id || 'N/A'}`);
+                    console.log(`${logTime()}  [AUTH - JWT] ${ws.clientId} | User: ${decoded.id || 'N/A'}`);
                 } catch (e) {
-                    console.log(`${logTime()} 🚫 [AUTH FAILED] IP: ${ip} | Error: ${e.message}`);
+                    console.log(`${logTime()} � [AUTH FAILED] IP: ${ip} | Error: ${e.message}`);
                 }
             }
 
@@ -264,7 +273,7 @@ wss.on("connection", (ws, req) => {
         if (packet.cmd === "subscribe") {
             packet.subscriptions.forEach((sub) => {
                 subscriptions.get(ws.clientId).add(sub.topic);
-                console.log(`${logTime()} 👂 [SUB] ${ws.clientId} -> "${sub.topic}"`);
+                console.log(`${logTime()} � sub:  ${ws.clientId} -> "${sub.topic}"`);
             });
             ws.send(mqtt.generate({
                 cmd:       "suback",
@@ -286,31 +295,37 @@ wss.on("connection", (ws, req) => {
 
             // ── Command: Update active rules directly (expert mode) ──
             if (inTopic === 'UPDATE_RULES') {
+                // bloque de seguridad por si truena la logica
                 try {
+                    // parseamos el payload (asumimos que viene limpio pero cuidadito)
                     const rules = JSON.parse(rawPayload);
-                    console.log(`${logTime()} 🛡️ [DIRECT] Expert update active rules:`, JSON.stringify(rules));
+                    console.log(`${logTime()}  direct:  Expert update active rules:`, JSON.stringify(rules));
                     orchestrator.setActiveRules(rules);
                 } catch(e) {
-                    console.error(`${logTime()} ❌ [DIRECT RULES] Parse/apply error:`, e.message);
+                    console.error(`${logTime()}  [DIRECT RULES] Parse/apply error:`, e.message);
                 }
                 return;
             }
 
             // ── Command: Update strategy via natural language prompt ──
             if (inTopic === 'SET_STRATEGY') {
+                // bloque de seguridad por si truena la logica
                 try {
+                    // parseamos el payload (asumimos que viene limpio pero cuidadito)
                     const { prompt } = JSON.parse(rawPayload);
-                    console.log(`${logTime()} 🧠 [AGENT] Processing prompt: "${prompt}" for ${ws.clientId}`);
+                    console.log(`${logTime()}  agent:  Processing prompt: "${prompt}" for ${ws.clientId}`);
                     
                     processPrompt(prompt).then((agentResponse) => {
+                        // escupimos el mensaje por redis para que lo agarre el orquestador
                         redisPub.publish('AGENT_RESPONSE', JSON.stringify({
                             prompt,
                             response: agentResponse,
                             timestamp: Date.now()
                         }));
-                        console.log(`${logTime()} 🤖 [AGENT] Responded successfully to ${ws.clientId}`);
+                        console.log(`${logTime()}  agent:  Responded successfully to ${ws.clientId}`);
                     }).catch((err) => {
-                        console.error(`${logTime()} ❌ [AGENT] Execution error:`, err.message);
+                        console.error(`${logTime()}  agent:  Execution error:`, err.message);
+                        // escupimos el mensaje por redis para que lo agarre el orquestador
                         redisPub.publish('AGENT_RESPONSE', JSON.stringify({
                             prompt,
                             response: `❌ Agent processing error: ${err.message}`,
@@ -318,7 +333,7 @@ wss.on("connection", (ws, req) => {
                         }));
                     });
                 } catch(e) {
-                    console.error(`${logTime()} ❌ [STRATEGY] Parse error:`, e.message);
+                    console.error(`${logTime()}  strategy:  Parse error:`, e.message);
                 }
                 return;
             }
@@ -352,29 +367,41 @@ wss.on("connection", (ws, req) => {
         }
     });
 
-    ws.on("message", (data) => parser.parse(data));
+    ws.on("message", (data) => {
+        // backpressure: limitamos el tamaño para no saturar la ram con paquetes malos
+        if (data.length > MAX_BUFFER_SIZE) {
+            console.warn(`${logTime()} backpressure: Dropped oversized frame (${data.length} bytes) from ${ws.clientId || 'Unknown'}`);
+            return;
+        }
+        parser.parse(data);
+    });
 
     ws.on("close", () => {
         if (ws.clientId) {
             clients.delete(ws.clientId);
             subscriptions.delete(ws.clientId);
-            console.log(`${logTime()} ❌ [DISCONNECT] ${ws.clientId}`);
+            console.log(`${logTime()}  disconnect:  ${ws.clientId}`);
         }
+        // removemos listeners para forzar el garbage collector y evitar memory leaks
+        ws.removeAllListeners();
     });
 
-    ws.on("error", () => ws.terminate());
+    ws.on("error", () => {
+        ws.removeAllListeners();
+        ws.terminate();
+    });
 });
 
-console.log(`\n🚀 [OPEN ENTERPRISE GRID] Online on PORT ${PORT}`);
-console.log(`🛡️  HFT Backpressure Shield Active (Max limit: ${MAX_BUFFER_SIZE / 1024} KB)`);
-console.log(`📊  Historical Cache Active: Last ${MAX_HISTORY} values per channel`);
-console.log(`🔓 Mode: Unrestricted topics | Sync: Redis Enabled\n`);
+console.log(`\n [OPEN ENTERPRISE GRID] Online on PORT ${PORT}`);
+console.log(`  HFT Backpressure Shield Active (Max limit: ${MAX_BUFFER_SIZE / 1024} KB)`);
+console.log(`  Historical Cache Active: Last ${MAX_HISTORY} values per channel`);
+console.log(` Mode: Unrestricted topics | Sync: Redis Enabled\n`);
 
 // --- 4. START PRICE ORCHESTRATOR ---
 if (orchestrator && orchestrator.start) {
     orchestrator.start(redisPub).catch((err) =>
-        console.error('❌ [ORCHESTRATOR] Fatal Critical Error:', err.message)
+        console.error(' orchestrator:  Fatal Critical Error:', err.message)
     );
 } else {
-    console.warn("⚠️ [WARN] Module 'orchestrator.js' does not expose the .start() function.");
+    console.warn(" warn:  Module 'orchestrator.js' does not expose the .start() function.");
 }

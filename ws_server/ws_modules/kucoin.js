@@ -1,3 +1,4 @@
+
 'use strict';
 
 const WebSocket = require('ws');
@@ -15,7 +16,7 @@ let _pingInterval = 20000;
 
 // PHASE 1: Pre-flight (REST)
 async function load() {
-    console.log('⏳ [KUCOIN] Getting public token via REST...');
+    console.log(' kucoin:  Getting public token via REST...');
     // Depending on your Node version, use node-fetch if fetch is not native
     const res  = await fetch('https://api.kucoin.com/api/v1/bullet-public', { method: 'POST' });
     
@@ -30,7 +31,7 @@ async function load() {
     _endpoint     = json.data.instanceServers[0].endpoint;
     _pingInterval = json.data.instanceServers[0].pingInterval || 20000;
     
-    console.log('✅ [KUCOIN] Token and Endpoint successfully obtained.');
+    console.log(' kucoin:  Token and Endpoint successfully obtained.');
 }
 
 // PHASE 2: HFT Connection (WebSocket)
@@ -39,11 +40,12 @@ function connect(updateMemory) {
         throw new Error('[KUCOIN] load() must be called before connect()');
     }
 
+    // pegamos contra el socket del exchange
     const ws = new WebSocket(`${_endpoint}?token=${_token}`);
     let pingTimer = null;
 
     ws.on('open', () => {
-        console.log('✅ [KUCOIN] Connected (Active Stream)');
+        console.log(' kucoin:  Connected (Active Stream)');
         
         ws.send(JSON.stringify({
             id: Date.now(),
@@ -60,8 +62,17 @@ function connect(updateMemory) {
         }, _pingInterval);
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (j.type === 'message' && j.data) {
                 updateMemory('Kucoin', 
@@ -72,9 +83,10 @@ function connect(updateMemory) {
         } catch (_) { return; }
     });
 
-    ws.on('error', (err) => console.error('❌ [KUCOIN] Error:', err.message));
+    ws.on('error', (err) => console.error(' kucoin:  Error:', err.message));
     ws.on('close', () => clearInterval(pingTimer));
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { load, connect, getFees: () => FEE_CONFIG };

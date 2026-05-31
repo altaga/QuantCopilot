@@ -1,3 +1,4 @@
+
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
@@ -20,11 +21,11 @@ try {
   const token = jwt.sign(payload, SECRET, options);
 
   console.log("------------------------------------------------------------------");
-  console.log("🚀 NEW CCM Token GENERATED");
+  console.log(" NEW CCM Token GENERATED");
   console.log("------------------------------------------------------------------");
   console.log(token);
   console.log("------------------------------------------------------------------");
-  console.log("💡 TIP: Copy this token and use it as the 'password' in your MQTT client.");
+  console.log("� TIP: Copy this token and use it as the 'password' in your MQTT client.");
 } catch (err) {
-  console.error("❌ Error generating token:", err.message);
+  console.error(" Error generating token:", err.message);
 }

@@ -19,7 +19,7 @@
     },
     "web": {
       "output": "server",
-      "favicon": "./src/assets/favicon.png"
+      "favicon": "./src/assets/logoBN.png"
     },
     "plugins": [
       "expo-router",

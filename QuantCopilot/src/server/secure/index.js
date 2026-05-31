@@ -1,3 +1,4 @@
+
 import { Hono } from "hono";
 import crypto from "crypto";
 import { Buffer } from "buffer";
@@ -7,7 +8,7 @@ const secureApp = new Hono();
 
 // Security logging middleware
 secureApp.use("*", async (c, next) => {
-  console.log(`🔒 Accessing secure endpoint: ${c.req.path}`);
+  console.log(`� Accessing secure endpoint: ${c.req.path}`);
   await next();
 });
 
@@ -27,6 +28,7 @@ secureApp.get("/token", (c) => {
     return c.json({ error: "WSS_SECRET server configuration missing" }, 500);
   }
 
+  // bloque de seguridad por si truena la logica
   try {
     const header = { alg: "HS512", typ: "JWT" };
     const now = Math.floor(Date.now() / 1000);

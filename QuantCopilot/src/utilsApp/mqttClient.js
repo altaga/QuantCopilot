@@ -1,3 +1,4 @@
+
 import { remoteLog } from "./remoteLog";
 
 // ─── MQTT Packet Builders (pure WebSocket, no library) ─────────────────────
@@ -136,12 +137,14 @@ export function createMqttClient(url, options = {}) {
 
   function emit(event, ...args) {
     (listeners[event] || []).forEach((fn) => {
+      // bloque de seguridad por si truena la logica
       try {
         fn(...args);
       } catch (_) {}
     });
   }
 
+  // pegamos contra el socket del exchange
   ws = new WebSocket(url, ["mqtt"]);
   ws.binaryType = "arraybuffer";
 

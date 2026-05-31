@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -8,6 +9,7 @@ const FEE_CONFIG = {
 };
 
 function connect(updateMemory) {
+    // pegamos contra el socket del exchange
     const ws = new WebSocket('wss://api-pub.bitfinex.com/ws/2');
     let isReconnecting = false;
 
@@ -15,17 +17,26 @@ function connect(updateMemory) {
         if (isReconnecting) return;
         isReconnecting = true;
         updateMemory('Bitfinex', 0, 0, 0, 0);
-        console.warn('⚠️ [BITFINEX] Desconectado. Reconectando en 5s...');
+        console.warn(' bitfinex:  Desconectado. Reconectando en 5s...');
         setTimeout(() => connect(updateMemory), 5000);
     };
 
     ws.on('open', () => {
-        console.log('✅ [BITFINEX] Connected');
+        console.log(' bitfinex:  Connected');
         ws.send(JSON.stringify({ event: 'subscribe', channel: 'ticker', symbol: 'tBTCUSD' }));
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (Array.isArray(j) && Array.isArray(j[1])) {
                 updateMemory('Bitfinex', parseFloat(j[1][0]), parseFloat(j[1][1]), parseFloat(j[1][2]), parseFloat(j[1][3]));
@@ -34,7 +45,10 @@ function connect(updateMemory) {
     });
 
     ws.on('error', (err) => {
-        console.error('❌ [BITFINEX] Error:', err.message);
+        // removemos listeners para forzar el garbage collector y evitar memory leaks
+        ws.removeAllListeners) ws.removeAllListeners();
+
+        console.error(' bitfinex:  Error:', err.message);
         ws.terminate();
     });
 
@@ -43,4 +57,5 @@ function connect(updateMemory) {
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

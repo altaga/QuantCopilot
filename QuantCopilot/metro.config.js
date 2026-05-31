@@ -1,3 +1,4 @@
+
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 const path = require("path");
@@ -21,4 +22,5 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = withNativeWind(config, { input: "./src/global.css" });

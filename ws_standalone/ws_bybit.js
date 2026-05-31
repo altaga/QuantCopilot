@@ -1,9 +1,11 @@
+
 const WebSocket = require('ws');
 
+// pegamos contra el socket del exchange
 const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
 
 ws.on('open', () => {
-    console.log('✅ Connected to Bybit V5 (BTCUSDT)');
+    console.log(' Connected to Bybit V5 (BTCUSDT)');
     
     // 1. Strict subscription to Level 1 of OrderBook (Best Bid / Best Ask)
     ws.send(JSON.stringify({
@@ -19,7 +21,15 @@ ws.on('open', () => {
     }, 20000);
 });
 
+// procesamos el tick entrante del socket
 ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+    // parseamos el payload (asumimos que viene limpio pero cuidadito)
     const parsed = JSON.parse(data);
 
     // Ignore Ping responses ("pong")
@@ -27,7 +37,7 @@ ws.on('message', (data) => {
 
     // Successful subscription confirmation
     if (parsed.success === true) {
-        console.log(`✅ Subscription confirmed: ${parsed.ret_msg}`);
+        console.log(` Subscription confirmed: ${parsed.ret_msg}`);
         return;
     }
 
@@ -48,12 +58,12 @@ ws.on('message', (data) => {
         }
     } else if (parsed.ret_msg) {
         // In case it throws a rate limit or malformed error
-        console.error('⚠️ Bybit message:', parsed.ret_msg);
+        console.error(' Bybit message:', parsed.ret_msg);
     }
 });
 
-ws.on('error', (err) => console.error('❌ Bybit network error:', err));
+ws.on('error', (err) => console.error(' Bybit network error:', err));
 
 ws.on('close', (code, reason) => {
-    console.log(`🔌 Bybit disconnected. Code: ${code}`);
+    console.log(` Bybit disconnected. Code: ${code}`);
 });

@@ -1,3 +1,4 @@
+
 'use strict';
 
 const { ChatBedrockConverse } = require("@langchain/aws");
@@ -121,6 +122,7 @@ function initAgent() {
  * Falls back to a clean instructions error if AWS Bedrock credentials are not configured.
  */
 async function processPrompt(userPrompt) {
+    // bloque de seguridad por si truena la logica
     try {
         initAgent();
     } catch (e) {
@@ -149,6 +151,7 @@ User Instruction: "${userPrompt}"`)
 
     while (iterations < maxIterations) {
         let response;
+        // bloque de seguridad por si truena la logica
         try {
             response = await modelWithTools.invoke(messages);
         } catch (err) {
@@ -166,6 +169,7 @@ User Instruction: "${userPrompt}"`)
                 const tool = tools.find(t => t.name === toolCall.name);
                 if (tool) {
                     let result;
+                    // bloque de seguridad por si truena la logica
                     try {
                         result = await tool.invoke(toolCall.args);
                     } catch (toolErr) {
@@ -186,4 +190,5 @@ User Instruction: "${userPrompt}"`)
     return "AI Agent reasoning took too many iterations without arriving at a final response.";
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { processPrompt };

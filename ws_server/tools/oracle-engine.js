@@ -1,3 +1,4 @@
+
 function calculateTruePrice(marketData) {
     let totalValue = 0;
     let totalVolume = 0;
@@ -42,4 +43,5 @@ function calculateTruePrice(marketData) {
     return totalVolume > 0 ? totalValue / totalVolume : median;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { calculateTruePrice };

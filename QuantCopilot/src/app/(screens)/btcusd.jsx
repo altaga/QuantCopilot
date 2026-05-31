@@ -1,3 +1,4 @@
+
 import { useRouter } from "expo-router";
 import { createChart, LineSeries } from "lightweight-charts";
 import { ArrowLeft } from "lucide-react-native";
@@ -13,6 +14,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -305,15 +307,22 @@ const StrategyPrompter = React.memo(
     onUpdateRulesDirect,
   }) => {
     const GlobalStyles = createGlobalStyles();
+    // definimos estado local para la ui
     const [prompt, setPrompt] = useState("");
+    // definimos estado local para la ui
     const [expertMode, setExpertMode] = useState(false);
+    // definimos estado local para la ui
     const [draftRules, setDraftRules] = useState({});
+    // definimos estado local para la ui
     const [rulesSubmitting, setRulesSubmitting] = useState(false);
 
     // Local text states to hold intermediate typing states (like decimal points, negative signs, trailing zeros)
     const [minSpreadText, setMinSpreadText] = useState("");
+    // definimos estado local para la ui
     const [maxExposureText, setMaxExposureText] = useState("");
+    // definimos estado local para la ui
     const [maxDailyLossText, setMaxDailyLossText] = useState("");
+    // definimos estado local para la ui
     const [maxConsecutiveText, setMaxConsecutiveText] = useState("");
 
     // ── Guard: skip useEffect sync while user is actively editing text fields ──
@@ -370,8 +379,15 @@ const StrategyPrompter = React.memo(
     return (
       <View style={[styles.feedCard, { marginTop: 16 }]}>
         <View style={styles.sectionTitleRow}>
-          <Text style={GlobalStyles.sectionHeader}>AI Strategy Console</Text>
-          <Text style={[styles.monoLabel, { color: accentColor }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Text style={GlobalStyles.sectionHeader}>AI Strategy Console</Text>
+            {activeRules?.killSwitch && (
+              <View style={{ backgroundColor: "rgba(248, 113, 113, 0.1)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderColor: "rgba(248, 113, 113, 0.4)", borderWidth: 1 }}>
+                <Text style={{ color: "#F87171", fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>SYS HALTED</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.monoLabel, { color: "#C9A962" }]}>
             NLP / BEDROCK
           </Text>
         </View>
@@ -409,17 +425,34 @@ const StrategyPrompter = React.memo(
           </Pressable>
           <Pressable
             disabled={agentLoading}
-            onPress={() => setPrompt("Emergency Stop. Block all execution.")}
+            onPress={() => {
+              if (onUpdateRulesDirect) {
+                const current = activeRules || {};
+                onUpdateRulesDirect({
+                  ...current,
+                  killSwitch: !current.killSwitch,
+                });
+              }
+            }}
             style={[
               styles.presetPill,
               {
-                borderColor: dangerMuted,
-                backgroundColor: "rgba(248, 113, 113, 0.05)",
+                borderColor: activeRules?.killSwitch
+                  ? "rgba(52, 211, 153, 0.3)" // successMuted
+                  : "rgba(248, 113, 113, 0.3)", // dangerMuted
+                backgroundColor: activeRules?.killSwitch
+                  ? "rgba(52, 211, 153, 0.05)"
+                  : "rgba(248, 113, 113, 0.05)",
               },
             ]}
           >
-            <Text style={[styles.presetText, { color: dangerColor }]}>
-              Kill Switch
+            <Text
+              style={[
+                styles.presetText,
+                { color: activeRules?.killSwitch ? "#34D399" : "#F87171" }, // successColor : dangerColor
+              ]}
+            >
+              {activeRules?.killSwitch ? "Resume Trading" : "Kill Switch"}
             </Text>
           </Pressable>
           <Pressable
@@ -749,6 +782,75 @@ const StrategyPrompter = React.memo(
   },
 );
 StrategyPrompter.displayName = "StrategyPrompter";
+
+const ExchangeRow = React.memo(({ exchange, marketData, isSelected, onSelect }) => {
+  const exData = marketData || {};
+  const bidVal = exData.bid ? parseFloat(exData.bid) : 0;
+  const askVal = exData.ask ? parseFloat(exData.ask) : 0;
+  const spreadVal = askVal - bidVal;
+
+  return (
+    <Pressable
+      onPress={() => onSelect(exchange)}
+      style={[
+        styles.tableRow, 
+        isSelected && styles.selectedRow,
+        Platform.OS === 'web' && { display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr' }
+      ]}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        {isSelected && <View style={styles.rowSelectorDot} />}
+        <Text style={[styles.exchangeName, isSelected && { color: accentColor }]}>
+          {exchange}
+        </Text>
+      </View>
+      <Text style={styles.priceValText}>
+        {bidVal > 0 ? bidVal.toFixed(1) : "---"}
+      </Text>
+      <Text style={[styles.priceValText, { color: dangerColor }]}>
+        {askVal > 0 ? askVal.toFixed(1) : "---"}
+      </Text>
+      <Text
+        style={[
+          styles.priceValText,
+          { color: spreadVal > 5 ? dangerColor : spreadVal < 1 ? successColor : warningColor },
+        ]}
+      >
+        {spreadVal > 0 ? parseFloat(spreadVal.toFixed(4)) : "---"}
+      </Text>
+    </Pressable>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.marketData?.bid === nextProps.marketData?.bid &&
+    prevProps.marketData?.ask === nextProps.marketData?.ask
+  );
+});
+ExchangeRow.displayName = "ExchangeRow";
+
+const HistoryRow = React.memo(({ tick }) => {
+  if (!tick || !tick.ts) return null;
+  const ts = new Date(tick.ts).toLocaleTimeString() || "--";
+  return (
+    <View style={[styles.tableRow, Platform.OS === 'web' && { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }]}>
+      <Text style={styles.priceValText}>{ts}</Text>
+      <Text style={styles.priceValText}>{(tick.bid ?? 0).toFixed(1)}</Text>
+      <Text style={[styles.priceValText, { color: dangerColor }]}>{(tick.ask ?? 0).toFixed(1)}</Text>
+      <Text
+        style={[
+          styles.priceValText,
+          { color: (tick.spread ?? 0) > 5 ? dangerColor : (tick.spread ?? 0) < 1 ? successColor : warningColor },
+        ]}
+      >
+        {parseFloat((tick.spread ?? 0).toFixed(4))}
+      </Text>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  return prevProps.tick?.ts === nextProps.tick?.ts;
+});
+HistoryRow.displayName = "HistoryRow";
 
 const BROKER_URL =
   process.env.EXPO_PUBLIC_MQTT_URL || "wss://websocket.blankit.dpdns.org";
@@ -1108,31 +1210,54 @@ export default function MainScreen() {
   const context = useContext(ContextModule);
   const GlobalStyles = createGlobalStyles();
   const router = useRouter();
+  // definimos estado local para la ui
+  const [isMounted, setIsMounted] = useState(false);
 
+  // disparamos el effect al montar o cambiar dependencias
   useEffect(() => {
+    setIsMounted(true);
     remoteLog("Component mounted", "INFO", "BOOT");
   }, []);
 
+  // definimos estado local para la ui
   const [isConnected, setIsConnected] = useState(false);
+  // definimos estado local para la ui
   const [marketData, setMarketData] = useState({}); // latest values for stats bar
+  // definimos estado local para la ui
   const [marketHistory, setMarketHistory] = useState({}); // 50-tick history per exchange
+  // definimos estado local para la ui
   const [lastUpdate, setLastUpdate] = useState(null);
+  // definimos estado local para la ui
   const [selectedExchange, setSelectedExchange] = useState(
     context?.value?.selectedExchange || "Binance",
   );
+  // definimos estado local para la ui
   const [token, setToken] = useState(null);
+  // definimos estado local para la ui
   const [tokenError, setTokenError] = useState(null);
+  // definimos estado local para la ui
   const [exchangeFees, setExchangeFees] = useState(null);
+  // definimos estado local para la ui
   const [alerts, setAlerts] = useState([]);
+  // definimos estado local para la ui
   const [truePrice, setTruePrice] = useState(null);
+  // definimos estado local para la ui
   const [activeRules, setActiveRules] = useState(null);
+  // definimos estado local para la ui
   const [trades, setTrades] = useState([]);
+  // definimos estado local para la ui
   const [selectedTradeId, setSelectedTradeId] = useState(null);
+  // definimos estado local para la ui
   const [pnl, setPnl] = useState(null);
+  // definimos estado local para la ui
   const [auditLog, setAuditLog] = useState([]);
+  // definimos estado local para la ui
   const [activeMqttClient, setActiveMqttClient] = useState(null);
+  // definimos estado local para la ui
   const [serverTime, setServerTime] = useState("--:--:--");
+  // definimos estado local para la ui
   const [agentResponse, setAgentResponse] = useState(null);
+  // definimos estado local para la ui
   const [agentLoading, setAgentLoading] = useState(false);
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -1198,7 +1323,9 @@ export default function MainScreen() {
   // Only live streaming data (price ticks, alerts, trades) uses the WebSocket.
   useEffect(() => {
     const load = async () => {
+      // bloque de seguridad por si truena la logica
       try {
+        // pegamos al endpoint via rest para traer data inicial
         const res = await fetch(`${BROKER_HTTP_URL}/api/snapshot`);
         if (!res.ok) return;
         const snap = await res.json();
@@ -1268,6 +1395,7 @@ export default function MainScreen() {
 
     let reconnectTimer = null;
     let activeClient = null;
+    let lastDomUpdate = 0; // 🛡️ React HFT Strict Mode: DOM Throttle Clock
 
     const connect = () => {
       remoteLog(`WS: connecting... tokenLen=${token.length}`, "INFO", "WS");
@@ -1292,9 +1420,11 @@ export default function MainScreen() {
       });
 
       activeClient.on("message", (topic, message) => {
+        // bloque de seguridad por si truena la logica
         try {
           let raw = message.toString();
           if (!raw || raw === "[object Object]") return;
+          // parseamos el payload (asumimos que viene limpio pero cuidadito)
           const data = JSON.parse(raw);
           if (!data || typeof data !== "object") return;
 
@@ -1454,13 +1584,7 @@ export default function MainScreen() {
           const priceData = data.data || data;
           if (!priceData || typeof priceData !== "object") return;
 
-          setMarketData(priceData);
-          setLastUpdate(new Date());
-          if (typeof data.truePrice === "number") {
-            setTruePrice(data.truePrice);
-          }
-
-          // Build rolling 50-tick history per exchange
+          // 1. Build rolling history per exchange and mutate ref (Zero DOM impact)
           const newHistory = { ...marketHistoryRef.current };
           EXCHANGES.forEach((ex) => {
             const exData = priceData[ex];
@@ -1481,9 +1605,8 @@ export default function MainScreen() {
               .filter((t) => t && t.bid && t.ask && t.ts);
           });
           marketHistoryRef.current = newHistory;
-          setMarketHistory(newHistory);
 
-          // Feed chart with selected exchange mid price
+          // 2. Feed chart imperatively (Bypasses React entirely -> 60 FPS)
           const exData = priceData[selectedExchangeRef.current];
           if (exData && exData.bid && exData.ask) {
             const mid = (parseFloat(exData.bid) + parseFloat(exData.ask)) / 2;
@@ -1501,6 +1624,18 @@ export default function MainScreen() {
             } else {
               lineSeriesRef.current.update({ time, value: mid });
             }
+          }
+
+          // 3. 🛡️ VISUAL THROTTLING FOR REACT DOM (Max 3 FPS to prevent thrashing)
+          const now = Date.now();
+          if (now - lastDomUpdate > 333) {
+            setMarketData(priceData);
+            setMarketHistory(newHistory);
+            setLastUpdate(new Date());
+            if (typeof data.truePrice === "number") {
+              setTruePrice(data.truePrice);
+            }
+            lastDomUpdate = now;
           }
         } catch (e) {
           remoteLog(`WS parse error: ${e.message}`, "ERROR", "WS");
@@ -1535,8 +1670,9 @@ export default function MainScreen() {
     selectedBid > 0 && selectedAsk > 0 ? (selectedBid + selectedAsk) / 2 : 0;
   const selectedSpread = selectedAsk - selectedBid;
 
+  const { width } = useWindowDimensions();
   const isLargeScreen =
-    Platform.OS === "web" && Dimensions.get("window").width > 768;
+    isMounted && Platform.OS === "web" && width > 768;
 
   return (
     <SafeAreaView style={GlobalStyles.container}>
@@ -1895,6 +2031,7 @@ export default function MainScreen() {
               onSetStrategy={(prompt) => {
                 if (activeMqttClient) {
                   setAgentLoading(true);
+                  // escupimos el mensaje por redis para que lo agarre el orquestador
                   activeMqttClient.publish(
                     "SET_STRATEGY",
                     JSON.stringify({ prompt }),
@@ -1909,7 +2046,9 @@ export default function MainScreen() {
                   Object.entries(rules).filter(([, v]) => v !== undefined),
                 );
                 setActiveRules(clean); // Optimistic update — no undefined can leak
+                // bloque de seguridad por si truena la logica
                 try {
+                  // pegamos al endpoint via rest para traer data inicial
                   const res = await fetch(`${BROKER_HTTP_URL}/api/rules`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1938,6 +2077,7 @@ export default function MainScreen() {
                     e.message,
                   );
                   if (activeMqttClient) {
+                    // escupimos el mensaje por redis para que lo agarre el orquestador
                     activeMqttClient.publish(
                       "UPDATE_RULES",
                       JSON.stringify(clean),
@@ -1974,69 +2114,22 @@ export default function MainScreen() {
 
             {/* Exchange selector */}
             <View style={styles.tableCard}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>
-                  Exchange
-                </Text>
+              <View style={[styles.tableHeader, Platform.OS === 'web' && { display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr' }]}>
+                <Text style={styles.tableHeaderCell}>Exchange</Text>
                 <Text style={styles.tableHeaderCell}>Bid</Text>
                 <Text style={styles.tableHeaderCell}>Ask</Text>
                 <Text style={styles.tableHeaderCell}>Spread</Text>
               </View>
 
-              {EXCHANGES.map((exchange) => {
-                const exData = marketData[exchange] || {};
-                const bidVal = exData.bid ? parseFloat(exData.bid) : 0;
-                const askVal = exData.ask ? parseFloat(exData.ask) : 0;
-                const spreadVal = askVal - bidVal;
-                const isSelected = selectedExchange === exchange;
-
-                return (
-                  <Pressable
-                    key={exchange}
-                    onPress={() => handleSelectExchange(exchange)}
-                    style={[styles.tableRow, isSelected && styles.selectedRow]}
-                  >
-                    <View
-                      style={{
-                        flex: 1.5,
-                        flexDirection: "row",
-                        alignItems: "center",
-                      }}
-                    >
-                      {isSelected && <View style={styles.rowSelectorDot} />}
-                      <Text
-                        style={[
-                          styles.exchangeName,
-                          isSelected && { color: accentColor },
-                        ]}
-                      >
-                        {exchange}
-                      </Text>
-                    </View>
-                    <Text style={styles.priceValText}>
-                      {bidVal > 0 ? bidVal.toFixed(1) : "---"}
-                    </Text>
-                    <Text style={[styles.priceValText, { color: dangerColor }]}>
-                      {askVal > 0 ? askVal.toFixed(1) : "---"}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.priceValText,
-                        {
-                          color:
-                            spreadVal > 5
-                              ? dangerColor
-                              : spreadVal < 1
-                                ? successColor
-                                : warningColor,
-                        },
-                      ]}
-                    >
-                      {spreadVal > 0 ? parseFloat(spreadVal.toFixed(4)) : "---"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {EXCHANGES.map((exchange) => (
+                <ExchangeRow 
+                  key={exchange}
+                  exchange={exchange}
+                  marketData={marketData[exchange]}
+                  isSelected={selectedExchange === exchange}
+                  onSelect={handleSelectExchange}
+                />
+              ))}
             </View>
 
             {/* Selected Exchange Fee Panel */}
@@ -2062,53 +2155,20 @@ export default function MainScreen() {
 
             {/* 50-tick history */}
             <View style={[styles.tableCard, { marginTop: 16 }]}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Time</Text>
+              <View style={[styles.tableHeader, Platform.OS === 'web' && { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }]}>
+                <Text style={styles.tableHeaderCell}>Time</Text>
                 <Text style={styles.tableHeaderCell}>Bid</Text>
                 <Text style={styles.tableHeaderCell}>Ask</Text>
                 <Text style={styles.tableHeaderCell}>Spread</Text>
               </View>
               <ScrollView style={{ maxHeight: 400 }}>
                 {(marketHistory[selectedExchange ?? "Binance"] || [])
-                  .filter(
-                    (t) => t && t.bid != null && t.ask != null && t.ts != null,
-                  )
+                  .filter((t) => t && t.bid != null && t.ask != null && t.ts != null)
                   .slice(-50)
                   .reverse()
-                  .map((tick, i) => {
-                    if (!tick || !tick.ts) return null;
-                    const ts = new Date(tick.ts).toLocaleTimeString() || "--";
-                    return (
-                      <View key={`${tick.ts}-${i}`} style={styles.tableRow}>
-                        <Text style={[styles.priceValText, { flex: 1 }]}>
-                          {ts}
-                        </Text>
-                        <Text style={[styles.priceValText, {}]}>
-                          {(tick.bid ?? 0).toFixed(1)}
-                        </Text>
-                        <Text
-                          style={[styles.priceValText, { color: dangerColor }]}
-                        >
-                          {(tick.ask ?? 0).toFixed(1)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.priceValText,
-                            {
-                              color:
-                                (tick.spread ?? 0) > 5
-                                  ? dangerColor
-                                  : (tick.spread ?? 0) < 1
-                                    ? successColor
-                                    : warningColor,
-                            },
-                          ]}
-                        >
-                          {parseFloat((tick.spread ?? 0).toFixed(4))}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                  .map((tick, i) => (
+                    <HistoryRow key={`${tick.ts}-${i}`} tick={tick} />
+                  ))}
               </ScrollView>
             </View>
             <RiskAuditConsole auditLog={auditLog} />

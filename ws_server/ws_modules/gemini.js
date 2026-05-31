@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -8,6 +9,7 @@ const FEE_CONFIG = {
 };
 
 function connect(updateMemory) {
+    // pegamos contra el socket del exchange
     const ws = new WebSocket('wss://api.gemini.com/v2/marketdata');
     let isReconnecting = false;
 
@@ -15,17 +17,26 @@ function connect(updateMemory) {
         if (isReconnecting) return;
         isReconnecting = true;
         updateMemory('Gemini', 0, 0, 0, 0);
-        console.warn('⚠️ [GEMINI] Desconectado. Reconectando en 5s...');
+        console.warn(' gemini:  Desconectado. Reconectando en 5s...');
         setTimeout(() => connect(updateMemory), 5000);
     };
 
     ws.on('open', () => {
-        console.log('✅ [GEMINI] Connected');
+        console.log(' gemini:  Connected');
         ws.send(JSON.stringify({ type: 'subscribe', subscriptions: [{ name: 'l2', symbols: ['BTCUSD'] }] }));
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (j.type === 'l2_updates' && j.changes && j.changes[0]) {
                 // The format is [side, price, quantity]
@@ -45,7 +56,10 @@ function connect(updateMemory) {
     });
 
     ws.on('error', (err) => {
-        console.error('❌ [GEMINI] Error:', err.message);
+        // removemos listeners para forzar el garbage collector y evitar memory leaks
+        ws.removeAllListeners) ws.removeAllListeners();
+
+        console.error(' gemini:  Error:', err.message);
         ws.terminate();
     });
 
@@ -54,4 +68,5 @@ function connect(updateMemory) {
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

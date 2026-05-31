@@ -1,3 +1,5 @@
+
+// bloque de seguridad por si truena la logica
 try {
   const { Buffer } = require("buffer");
   global.Buffer = global.Buffer || Buffer;

@@ -1,3 +1,4 @@
+
 import { Platform } from "react-native";
 
 const LOG_URL =
@@ -32,6 +33,10 @@ export function remoteLog(
   tag = "APP",
   data = undefined,
 ) {
+  // Logs deshabilitados a nivel global para limpiar la consola web
+  return;
+
+  // bloque de seguridad por si truena la logica
   try {
     const localFn =
       level === "ERROR"
@@ -42,6 +47,9 @@ export function remoteLog(
     localFn(`[${tag}] ${message ?? "null"}`, data ?? "");
   } catch (_) {}
 
+  // Envio remoto deshabilitado para evitar sobrecarga del servidor Expo
+  /*
+  // bloque de seguridad por si truena la logica
   try {
     const msg = (message ?? "null").toString();
     const serializedData = data ? safeStringify(data) : "";
@@ -51,8 +59,10 @@ export function remoteLog(
       message: msg,
       data: serializedData,
     });
+    // pegamos al endpoint via rest para traer data inicial
     fetch(`${LOG_URL}?${params.toString()}`, {
       method: "GET",
     }).catch(() => {});
   } catch (_) {}
+  */
 }

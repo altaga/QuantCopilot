@@ -1,3 +1,4 @@
+
 import { Fragment, useCallback, useContext, useEffect } from "react";
 import { getAsyncStorageValue } from "../utilsApp/utils";
 import ContextModule from "./contextModule";
@@ -5,6 +6,7 @@ import ContextModule from "./contextModule";
 export default function ContextLoader() {
   const { setValue } = useContext(ContextModule);
   const checkStarter = useCallback(async () => {
+    // bloque de seguridad por si truena la logica
     try {
       const selectedExchange = await getAsyncStorageValue("selectedExchange");
       if (selectedExchange !== null) {
@@ -21,6 +23,7 @@ export default function ContextLoader() {
     }
   }, [setValue]);
 
+  // disparamos el effect al montar o cambiar dependencias
   useEffect(() => {
     checkStarter();
   }, [checkStarter]);

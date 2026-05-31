@@ -1,3 +1,4 @@
+
 "use strict";
 
 const { calculateTruePrice } = require("./tools/oracle-engine");
@@ -73,7 +74,7 @@ let activeRules = { ...DEFAULT_RULES };
 
 function setActiveRules(partial) {
   activeRules = { ...activeRules, ...partial };
-  console.log("[ORCH] Active rules updated:", JSON.stringify(activeRules));
+  console.log("orch:  Active rules updated:", JSON.stringify(activeRules));
 
   if (activeRules.enableRektSwap === false) {
     marketData.RektSwap = {
@@ -86,6 +87,7 @@ function setActiveRules(partial) {
   }
 
   if (redisClientRef) {
+    // escupimos el mensaje por redis para que lo agarre el orquestador
     redisClientRef.publish("ACTIVE_RULES", JSON.stringify(activeRules));
   }
 }
@@ -185,6 +187,7 @@ async function detectCrossExchangeArbitrage() {
           const verdict = evaluate(opportunity, activeRules, marketData);
 
           if (!verdict.approved) {
+            // escupimos el mensaje por redis para que lo agarre el orquestador
             redisClientRef.publish(
               AUDIT_TOPIC,
               JSON.stringify({
@@ -220,7 +223,9 @@ async function detectCrossExchangeArbitrage() {
             }),
           );
 
+          // escupimos el mensaje por redis para que lo agarre el orquestador
           redisClientRef.publish(TRADE_TOPIC, JSON.stringify(tradeResult));
+          // escupimos el mensaje por redis para que lo agarre el orquestador
           redisClientRef.publish(PNL_TOPIC, JSON.stringify(getPnLSummary()));
         }
       }
@@ -230,7 +235,7 @@ async function detectCrossExchangeArbitrage() {
 
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
 async function start(redisPub) {
-  console.log("🚀 [CCM] Starting HFT Orchestrator...");
+  console.log(" ccm:  Starting HFT Orchestrator...");
   redisClientRef = redisPub;
 
   // Initialize simulation engine with Redis persistence
@@ -248,10 +253,11 @@ async function start(redisPub) {
       globalExchangeFees[exchangeKey] = mod.getFees();
     }
     if (typeof mod.load === "function") {
+      // bloque de seguridad por si truena la logica
       try {
         await mod.load();
       } catch (err) {
-        console.error(`❌ [${name.toUpperCase()}] Pre-flight Error:`, err.message);
+        console.error(` [${name.toUpperCase()}] Pre-flight Error:`, err.message);
       }
     }
   });
@@ -261,15 +267,16 @@ async function start(redisPub) {
   // Phase 2: Synchronous Connections
   modules.forEach(({ name, mod }) => {
     let ws;
+    // bloque de seguridad por si truena la logica
     try {
       ws = mod.connect(updateMemory);
     } catch (err) {
-      console.error(`❌ [${name.toUpperCase()}] Critical connection error:`, err.message);
+      console.error(` [${name.toUpperCase()}] Critical connection error:`, err.message);
       return;
     }
     if (!ws) return;
     ws.on("close", () => {
-      console.warn(`⚠️ [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
+      console.warn(` [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
     });
   });
 
@@ -296,6 +303,7 @@ async function start(redisPub) {
       truePrice: truePrice ? parseFloat(truePrice.toFixed(2)) : null,
     };
 
+    // escupimos el mensaje por redis para que lo agarre el orquestador
     redisPub.publish(TOPIC, JSON.stringify(msg));
   }, PUBLISH_INTERVAL_MS);
 
@@ -328,7 +336,9 @@ async function start(redisPub) {
 
     const payload = { ...pnl, history: metricsHistory };
 
+    // escupimos el mensaje por redis para que lo agarre el orquestador
     redisPub.publish(PNL_TOPIC, JSON.stringify(payload));
+    // escupimos el mensaje por redis para que lo agarre el orquestador
     redisPub.publish("ACTIVE_RULES", JSON.stringify(activeRules));
   }, 2000);
 }
@@ -346,6 +356,7 @@ function getFullPnL() {
   return { ...getPnLSummary(), history: metricsHistory };
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = {
   start,
   updateMemory,

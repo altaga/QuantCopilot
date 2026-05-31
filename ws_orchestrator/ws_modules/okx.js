@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -11,6 +12,7 @@ const FEE_CONFIG = {
  * OKX – BTC-USDT bbo-tbt
  */
 function connect(updateMemory) {
+    // pegamos contra el socket del exchange
     const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
     let isReconnecting = false;
 
@@ -18,20 +20,23 @@ function connect(updateMemory) {
         if (isReconnecting) return;
         isReconnecting = true;
         updateMemory('OKX', 0, 0, 0, 0);
-        console.warn('⚠️ [OKX] Desconectado. Reconectando en 5s...');
+        console.warn(' okx:  Desconectado. Reconectando en 5s...');
         setTimeout(() => connect(updateMemory), 5000);
     };
 
     ws.on('open', () => {
-        console.log('✅ [OKX] Connected');
+        console.log(' okx:  Connected');
         ws.send(JSON.stringify({
             op: 'subscribe',
             args: [{ channel: 'bbo-tbt', instId: 'BTC-USDT' }]
         }));
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data.toString());
             if (j.data && j.data[0]) {
                 const bidPrice = j.data[0].bids[0] ? parseFloat(j.data[0].bids[0][0]) : null;
@@ -46,7 +51,7 @@ function connect(updateMemory) {
     });
 
     ws.on('error', (err) => {
-        console.error('❌ [OKX] Error:', err.message);
+        console.error(' okx:  Error:', err.message);
         ws.terminate();
     });
 
@@ -55,4 +60,5 @@ function connect(updateMemory) {
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

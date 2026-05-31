@@ -1,3 +1,4 @@
+
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -121,7 +122,9 @@ export default function MainHub() {
   const router = useRouter();
   const GlobalStyles = createGlobalStyles();
 
+  // definimos estado local para la ui
   const [token, setToken] = useState(null);
+  // definimos estado local para la ui
   const [activeMqttClient, setActiveMqttClient] = useState(null);
 
   // Dashboard Live Data
@@ -134,10 +137,14 @@ export default function MainHub() {
     blockedTradesCount: 0,
     totalRiskSavedUSD: 0,
   });
+  // definimos estado local para la ui
   const [activeRules, setActiveRules] = useState({});
+  // definimos estado local para la ui
   const [alerts, setAlerts] = useState([]);
+  // definimos estado local para la ui
   const [auditLog, setAuditLog] = useState([]);
 
+  // definimos estado local para la ui
   const [serverTime, setServerTime] = useState(new Date().toUTCString());
 
   // Clock
@@ -151,7 +158,9 @@ export default function MainHub() {
   // Fetch initial REST snapshot
   useEffect(() => {
     const load = async () => {
+      // bloque de seguridad por si truena la logica
       try {
+        // pegamos al endpoint via rest para traer data inicial
         const res = await fetch(`${BROKER_HTTP_URL}/api/snapshot`);
         if (!res.ok) return;
         const snap = await res.json();
@@ -172,6 +181,7 @@ export default function MainHub() {
     getMqttToken().then(setToken);
   }, []);
 
+  // disparamos el effect al montar o cambiar dependencias
   useEffect(() => {
     if (!token) return;
 
@@ -189,7 +199,9 @@ export default function MainHub() {
     });
 
     client.on("message", (topic, message) => {
+      // bloque de seguridad por si truena la logica
       try {
+        // parseamos el payload (asumimos que viene limpio pero cuidadito)
         const data = JSON.parse(message.toString());
         if (topic === "PNL_UPDATE") {
           setPnl(data);

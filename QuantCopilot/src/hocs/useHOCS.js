@@ -1,3 +1,5 @@
+// higher order components. por ahora vacio pero util para inyectar logica
+
 import {
   useGlobalSearchParams,
   useLocalSearchParams,

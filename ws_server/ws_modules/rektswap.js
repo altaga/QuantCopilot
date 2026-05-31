@@ -1,3 +1,4 @@
+
 'use strict';
 const WebSocket = require('ws');
 
@@ -15,11 +16,12 @@ const ENDPOINTS = [
 
 function connect(updateMemory, endpointIndex = 0) {
     if (endpointIndex >= ENDPOINTS.length) {
-        console.error('❌ [REKTSWAP] All endpoints blocked.');
+        console.error(' rektswap:  All endpoints blocked.');
         return null;
     }
 
     const { url, label } = ENDPOINTS[endpointIndex];
+    // pegamos contra el socket del exchange
     const ws = new WebSocket(url);
     let opened = false;
     let fallbackTriggered = false;
@@ -28,17 +30,26 @@ function connect(updateMemory, endpointIndex = 0) {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
         ws.terminate();
-        console.warn(`⚠️ [REKTSWAP] Connection failed with ${label}. Trying fallback...`);
+        console.warn(` rektswap:  Connection failed with ${label}. Trying fallback...`);
         setTimeout(() => connect(updateMemory, endpointIndex + 1), 1000);
     };
 
     ws.on('open', () => {
         opened = true;
-        console.log(`⚠️ [REKTSWAP] Conectado vía ${label} (Mock Volatility Exchange Active! Mode: ${chaosMode})`);
+        console.log(` rektswap:  Conectado vía ${label} (Mock Volatility Exchange Active! Mode: ${chaosMode})`);
     });
 
+    // procesamos el tick entrante del socket
     ws.on('message', (data) => {
+        // 🛡️ HFT Backpressure Shield
+        if (data && data.length > 50000) {
+            console.warn(' backpressure:  Payload exceeded 50KB. Dropped.');
+            return;
+        }
+
+        // bloque de seguridad por si truena la logica
         try {
+            // parseamos el payload (asumimos que viene limpio pero cuidadito)
             const j = JSON.parse(data);
             if (j.b && j.a && j.B && j.A) {
                 let bid = parseFloat(j.b);
@@ -113,11 +124,14 @@ function connect(updateMemory, endpointIndex = 0) {
     });
 
     ws.on('error', (err) => {
+        // removemos listeners para forzar el garbage collector y evitar memory leaks
+        ws.removeAllListeners) ws.removeAllListeners();
+
         if (!opened) {
-            console.error(`❌ [REKTSWAP] Connection error in ${label}:`, err.message);
+            console.error(` rektswap:  Connection error in ${label}:`, err.message);
             triggerFallback();
         } else {
-            console.error(`❌ [REKTSWAP] Error in ${label}:`, err.message);
+            console.error(` rektswap:  Error in ${label}:`, err.message);
         }
     });
 
@@ -130,4 +144,5 @@ function connect(updateMemory, endpointIndex = 0) {
     return ws;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { connect, getFees: () => FEE_CONFIG };

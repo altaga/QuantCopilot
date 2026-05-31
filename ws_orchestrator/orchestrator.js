@@ -1,3 +1,4 @@
+
 'use strict';
 
 const { evaluate, DEFAULT_RULES } = require("../ws_server/tools/risk-engine");
@@ -34,6 +35,9 @@ const marketData = {
     RektSwap: { bid: 0, ask: 0 }
 };
 
+// Cache keys to prevent O(N) Object.keys() allocations on every tick
+const EXCHANGE_KEYS = Object.keys(marketData);
+
 let globalExchangeFees = {};
 let stats = {
     opportunitiesDetected: 0,
@@ -41,20 +45,25 @@ let stats = {
     opportunitiesBlocked: 0,
     totalProfitUSD: 0
 };
-let recentOpportunities = [];
+// HFT Zero-Allocation Circular Buffer for Logs
+const MAX_LOGS = 5;
+const recentOpportunities = new Array(MAX_LOGS).fill(null).map(() => ({
+    Time: '', Route: '', Vol: '', Profit: '', Status: '', Reason: ''
+}));
+let logIndex = 0;
 
 function addOpportunityLog(opp, verdict) {
-    recentOpportunities.unshift({
-        Time: new Date().toLocaleTimeString(),
-        Route: `${opp.buyExchange} -> ${opp.sellExchange}`,
-        Vol: opp.volume.toFixed(2),
-        Profit: `$${opp.profitUSD.toFixed(2)}`,
-        Status: verdict.approved ? '✅ APPROVED' : '⛔ BLOCKED',
-        Reason: verdict.reason || 'OK'
-    });
-    if (recentOpportunities.length > 5) {
-        recentOpportunities.pop();
-    }
+    // Mutate existing object reference to prevent GC allocations
+    const logRef = recentOpportunities[logIndex];
+    logRef.Time = new Date().toLocaleTimeString();
+    logRef.Route = opp.buyExchange + ' -> ' + opp.sellExchange;
+    logRef.Vol = opp.volume.toFixed(2);
+    logRef.Profit = '$' + opp.profitUSD.toFixed(2);
+    logRef.Status = verdict.approved ? '✅ APPROVED' : '⛔ BLOCKED';
+    logRef.Reason = verdict.reason || 'OK';
+    
+    // Circular pointer increment
+    logIndex = (logIndex + 1) % MAX_LOGS;
 }
 
 function updateMemory(exchange, bidPrice, bidVol, askPrice, askVol) {
@@ -73,15 +82,16 @@ function updateMemory(exchange, bidPrice, bidVol, askPrice, askVol) {
     }
 }
 
-function detectCrossExchangeArbitrage() {
-    const exchanges = Object.keys(marketData);
+// HFT Pre-allocated opportunity reference (Zero-allocation)
+const _oppRef = { buyExchange: '', sellExchange: '', buyPrice: 0, sellPrice: 0, volume: 0, profitUSD: 0 };
 
-    for (let i = 0; i < exchanges.length; i++) {
-        for (let j = 0; j < exchanges.length; j++) {
+function detectCrossExchangeArbitrage() {
+    for (let i = 0; i < EXCHANGE_KEYS.length; i++) {
+        for (let j = 0; j < EXCHANGE_KEYS.length; j++) {
             if (i === j) continue;
 
-            const exchangeA = exchanges[i]; // Buy here
-            const exchangeB = exchanges[j]; // Sell here
+            const exchangeA = EXCHANGE_KEYS[i]; // Buy here
+            const exchangeB = EXCHANGE_KEYS[j]; // Sell here
 
             const askA = marketData[exchangeA].ask;
             const volA = 0.05; // Realistic mock volume (approx $3,500 exposure)
@@ -106,18 +116,17 @@ function detectCrossExchangeArbitrage() {
                 if (netProfitTotalUSD > 0) {
                     stats.opportunitiesDetected++;
                     
-                    const opportunity = {
-                        buyExchange: exchangeA,
-                        sellExchange: exchangeB,
-                        buyPrice: askA,
-                        sellPrice: bidB,
-                        volume: executableVolume,
-                        profitUSD: parseFloat(netProfitTotalUSD.toFixed(4))
-                    };
+                    // Mutate pre-allocated reference
+                    _oppRef.buyExchange = exchangeA;
+                    _oppRef.sellExchange = exchangeB;
+                    _oppRef.buyPrice = askA;
+                    _oppRef.sellPrice = bidB;
+                    _oppRef.volume = executableVolume;
+                    _oppRef.profitUSD = parseFloat(netProfitTotalUSD.toFixed(4));
 
-                    const verdict = evaluate(opportunity, DEFAULT_RULES, marketData);
+                    const verdict = evaluate(_oppRef, DEFAULT_RULES, marketData);
                     
-                    addOpportunityLog(opportunity, verdict);
+                    addOpportunityLog(_oppRef, verdict);
 
                     if (!verdict.approved) {
                         stats.opportunitiesBlocked++;
@@ -132,7 +141,7 @@ function detectCrossExchangeArbitrage() {
 }
 
 async function start() {
-    console.log('🚀 [CCM] Initializing Test Orchestrator (Math Logic & Risk Engine)...');
+    console.log(' ccm:  Initializing Test Orchestrator (Math Logic & Risk Engine)...');
     
     const modules = EXCHANGES.map(name => ({ name, mod: require(`./ws_modules/${name}`) }));
 
@@ -143,10 +152,11 @@ async function start() {
             globalExchangeFees[exchangeKey] = mod.getFees();
         }
         if (typeof mod.load === 'function') {
+            // bloque de seguridad por si truena la logica
             try {
                 await mod.load(); 
             } catch (err) {
-                console.error(`❌ [${name.toUpperCase()}] Pre-flight Error:`, err.message);
+                console.error(` [${name.toUpperCase()}] Pre-flight Error:`, err.message);
             }
         }
     });
@@ -156,19 +166,20 @@ async function start() {
     // Phase 2: Synchronous Connections
     modules.forEach(({ name, mod }) => {
         let ws;
+        // bloque de seguridad por si truena la logica
         try {
             ws = mod.connect(updateMemory);
         } catch (err) {
-            console.error(`❌ [${name.toUpperCase()}] Critical connection error:`, err.message);
+            console.error(` [${name.toUpperCase()}] Critical connection error:`, err.message);
             return;
         }
         if (!ws) return;
         ws.on('close', () => {
-            console.warn(`⚠️ [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
+            console.warn(` [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
         });
     });
 
-    console.log(`✅ [CCM] Connections established. Starting display at ${DISPLAY_HZ} Hz...\n`);
+    console.log(` ccm:  Connections established. Starting display at ${DISPLAY_HZ} Hz...\n`);
 
     setInterval(() => {
         console.clear();
@@ -183,13 +194,13 @@ async function start() {
         console.table(DEFAULT_RULES);
 
         console.log(`\n[ 3. LIVE EXECUTION LOGS ]`);
-        if (recentOpportunities.length > 0) {
+        if (recentOpportunities[0].Time !== '') {
             console.table(recentOpportunities);
         } else {
             console.log("   Waiting for opportunities...");
         }
 
-        console.log(`\n📊 STATS: Detected: ${stats.opportunitiesDetected} | Approved: ${stats.opportunitiesApproved} | Blocked: ${stats.opportunitiesBlocked} | Total Theoretical PnL: $${stats.totalProfitUSD.toFixed(2)}`);
+        console.log(`\n STATS: Detected: ${stats.opportunitiesDetected} | Approved: ${stats.opportunitiesApproved} | Blocked: ${stats.opportunitiesBlocked} | Total Theoretical PnL: $${stats.totalProfitUSD.toFixed(2)}`);
     }, DISPLAY_INTERVAL_MS);
 }
 

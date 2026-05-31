@@ -1,3 +1,4 @@
+
 'use strict';
 
 // ─── STRATEGY PARSER ──────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ function parsePromptToRules(prompt) {
     // Check for preset matches first
     for (const [name, preset] of Object.entries(PRESETS)) {
         if (text.includes(name)) {
-            console.log(`[PARSER] Matched preset: "${name}"`);
+            console.log(`parser:  Matched preset: "${name}"`);
             return { ...preset };
         }
     }
@@ -95,8 +96,9 @@ function parsePromptToRules(prompt) {
         }
     }
 
-    console.log('[PARSER] Extracted rules:', JSON.stringify(rules));
+    console.log('parser:  Extracted rules:', JSON.stringify(rules));
     return Object.keys(rules).length > 0 ? rules : null;
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = { parsePromptToRules, PRESETS };

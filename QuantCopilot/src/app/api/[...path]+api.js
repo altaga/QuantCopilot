@@ -1,3 +1,4 @@
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import publicApp from '../../server/public';
@@ -27,7 +28,7 @@ app.use('*', async (c, next) => {
   const blockedAgents = ["postman", "curl", "node-fetch", "axios", "insomnia", "undici"];
   
   if (blockedAgents.some(agent => userAgent.includes(agent))) {
-    console.warn(`🚫 Blocked automated tool: ${userAgent}`);
+    console.warn(`� Blocked automated tool: ${userAgent}`);
     return c.json({ error: "Automated requests and server tools are not allowed." }, 403);
   }
   await next();
@@ -39,9 +40,13 @@ app.route('/secure', secureApp);
 
 // Handler bindings for Expo Router API compatibility
 export const GET = (request) => app.fetch(request);
+// pegamos al endpoint via rest para traer data inicial
 export const POST = (request) => app.fetch(request);
+// pegamos al endpoint via rest para traer data inicial
 export const PUT = (request) => app.fetch(request);
+// pegamos al endpoint via rest para traer data inicial
 export const DELETE = (request) => app.fetch(request);
+// pegamos al endpoint via rest para traer data inicial
 export const OPTIONS = (request) => app.fetch(request);
 
 export default app;

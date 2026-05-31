@@ -1,3 +1,4 @@
+
 "use strict";
 
 // ─── SIMULATION ENGINE ────────────────────────────────────────────────────────
@@ -34,7 +35,9 @@ const EXCHANGES = [
 // We cache wallets in RAM for zero-latency reads on every arbitrage check.
 // Redis is synced after each write for persistence.
 let walletsCache = null;
-let tradesCache = [];
+const tradesCache = new Array(MAX_TRADE_LOG).fill(null);
+let tradeIndex = 0;
+let tradeCount = 0;
 let redisRef = null;
 
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
@@ -45,7 +48,9 @@ async function init(redisClient) {
   walletsCache = buildFreshWallets();
   await persistWallets();
 
-  tradesCache = [];
+  tradesCache.fill(null);
+  tradeIndex = 0;
+  tradeCount = 0;
   await redisClient.del(REDIS_KEY_TRADES);
 
   console.log(
@@ -121,12 +126,9 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
 
   // HFT mode: always execute at full volume immediately
   // No partial fills - use requested volume or nothing
-  const isRektLoss =
-    (buyEx === "RektSwap" || sellEx === "RektSwap") && Math.random() < 0.05;
 
   // Force FULL FILL for HFT - execute at exact market price
   let status = "FILLED";
-  if (isRektLoss) status = "REKT";
 
   // Fees
   const feeRateBuy = globalExchangeFees[buyEx]?.taker || 0.002;
@@ -134,10 +136,6 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
   const buyCostUSD = fixMath(executableVol * buyPr * (1 + feeRateBuy));
   let sellGainUSD = fixMath(executableVol * sellPr * (1 - feeRateSell));
 
-  if (isRektLoss) {
-    const haircut = 0.991 + Math.random() * 0.005; // 0.991 to 0.996
-    sellGainUSD = fixMath(buyCostUSD * haircut);
-  }
 
   const feesUSD = fixMath(
     executableVol * buyPr * feeRateBuy + executableVol * sellPr * feeRateSell
@@ -171,8 +169,10 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
   };
 
   // Persist to Redis
-  tradesCache.unshift(trade);
-  if (tradesCache.length > MAX_TRADE_LOG) tradesCache.pop();
+  // O(1) Circular Buffer insertion
+  tradesCache[tradeIndex] = trade;
+  tradeIndex = (tradeIndex + 1) % MAX_TRADE_LOG;
+  if (tradeCount < MAX_TRADE_LOG) tradeCount++;
   if (redisRef) {
     await redisRef.lpush(REDIS_KEY_TRADES, JSON.stringify(trade));
     await redisRef.ltrim(REDIS_KEY_TRADES, 0, MAX_TRADE_LOG - 1);
@@ -181,15 +181,9 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
   // Record result
   recordTradeResult(netProfitUSD);
 
-  if (isRektLoss) {
-    console.log(
-      `⚠️ [SIM] [REKT LOSS INJECTED] RektSwap txn failed! Net: $${netProfitUSD.toFixed(2)}`,
-    );
-  } else {
-    console.log(
-      `[SIM] ${status} | ${buyEx} → ${sellEx} | Vol: ${executableVol.toFixed(5)} BTC | Net: $${netProfitUSD.toFixed(2)}`,
-    );
-  }
+  console.log(
+    `[SIM] ${status} | ${buyEx} → ${sellEx} | Vol: ${executableVol.toFixed(5)} BTC | Net: $${netProfitUSD.toFixed(2)}`,
+  );
   return trade;
 }
 
@@ -199,28 +193,41 @@ function getWallets() {
 }
 
 function getTradeLog() {
-  return tradesCache.slice(0, 100);
+  const res = [];
+  for (let i = 0; i < Math.min(tradeCount, 100); i++) {
+      const idx = (tradeIndex - 1 - i + MAX_TRADE_LOG) % MAX_TRADE_LOG;
+      res.push(tradesCache[idx]);
+  }
+  return res;
 }
 
 function getPnLSummary() {
   const session = getSessionState();
-  const totalNet = tradesCache.reduce(
-    (sum, t) => sum + (t.netProfitUSD || 0),
-    0,
-  );
-  const totalFees = tradesCache.reduce((sum, t) => sum + (t.feesUSD || 0), 0);
-  const wins = tradesCache.filter((t) => t.netProfitUSD > 0).length;
-  const losses = tradesCache.filter((t) => t.netProfitUSD <= 0).length;
-  const winRate =
-    tradesCache.length > 0 ? (wins / tradesCache.length) * 100 : 0;
+  
+  // Zero-Allocation O(N) Iteration
+  let totalNet = 0;
+  let totalFees = 0;
+  let wins = 0;
+  let losses = 0;
+  
+  for (let i = 0; i < tradeCount; i++) {
+    const t = tradesCache[i];
+    if (!t) continue;
+    totalNet += (t.netProfitUSD || 0);
+    totalFees += (t.feesUSD || 0);
+    if ((t.netProfitUSD || 0) > 0) wins++;
+    else losses++;
+  }
+
+  const winRate = tradeCount > 0 ? (wins / tradeCount) * 100 : 0;
 
   let totalWalletUSD = 0;
   if (walletsCache) {
-    Object.keys(walletsCache).forEach((ex) => {
+    for (const ex in walletsCache) {
       if (ex !== "RektSwap") {
         totalWalletUSD += walletsCache[ex].USD;
       }
-    });
+    }
   }
 
   return {
@@ -240,14 +247,17 @@ function getPnLSummary() {
 
 async function resetWallets() {
   walletsCache = buildFreshWallets();
-  tradesCache = [];
+  tradesCache.fill(null);
+  tradeIndex = 0;
+  tradeCount = 0;
   if (redisRef) {
     await redisRef.set(REDIS_KEY_WALLETS, JSON.stringify(walletsCache));
     await redisRef.del(REDIS_KEY_TRADES);
   }
-  console.log("[SIM] Wallets and trade log reset.");
+  console.log("sim:  Wallets and trade log reset.");
 }
 
+// exportamos el modulo para usarlo en el pipeline
 module.exports = {
   init,
   execute,

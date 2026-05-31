@@ -1,3 +1,4 @@
+
 if (typeof window !== "undefined") {
   // Ignore patterns for console warnings/errors
   const ignorePatterns = [

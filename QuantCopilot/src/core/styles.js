@@ -1,3 +1,4 @@
+
 import { Dimensions, StatusBar, StyleSheet, Platform } from "react-native";
 
 export const screenHeight = Dimensions.get("screen").height;
