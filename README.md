@@ -13,7 +13,7 @@ Para entender rápidamente el funcionamiento y ver el sistema HFT en acción, te
 
 <div align="center">
   <a href="https://youtu.be/YUPet9G21Ts">
-    <img src="https://img.youtube.com/vi/YUPet9G21Ts/maxresdefault.jpg" alt="Video Demo QuantCopilot" width="800"/>
+    <img src="./Images/video.png" alt="Video Demo QuantCopilot" width="800"/>
   </a>
 </div>
 
