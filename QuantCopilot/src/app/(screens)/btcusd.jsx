@@ -776,7 +776,7 @@ const EXCHANGES = [
 ];
 
 const OpportunityMathDepth = React.memo(
-  ({ alerts, trades, selectedTradeId, onClearSelection }) => {
+  ({ alerts, trades, selectedTradeId, onClearSelection, exchangeFees }) => {
     const GlobalStyles = createGlobalStyles();
     // Determine which trade/alert to show
     const rawTrade = selectedTradeId
@@ -1954,6 +1954,7 @@ export default function MainScreen() {
               trades={trades}
               selectedTradeId={selectedTradeId}
               onClearSelection={() => setSelectedTradeId(null)}
+              exchangeFees={exchangeFees}
             />
             <TradeLog
               trades={trades}

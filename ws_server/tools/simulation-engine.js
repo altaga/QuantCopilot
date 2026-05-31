@@ -13,8 +13,8 @@ const MAX_TRADE_LOG = 200;
 const fixMath = (num) => Math.round(num * 10000) / 10000;
 
 // Starting USD balance per exchange for fresh simulation
-// 1000 * 10 exchanges (excl. RektSwap) = exactly 10000 USD total starting capital
-const INITIAL_USD_PER_EXCHANGE = 1000;
+// 50000 * 10 exchanges = 500,000 USD total starting capital
+const INITIAL_USD_PER_EXCHANGE = 50000;
 
 const EXCHANGES = [
   "Binance",
@@ -102,7 +102,7 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
 
   // Seed BTC on sell side if needed
   if (sellWallet.BTC === 0) {
-    sellWallet.BTC = fixMath((INITIAL_USD_PER_EXCHANGE * 0.1) / sellPr);
+    sellWallet.BTC = fixMath((INITIAL_USD_PER_EXCHANGE * 0.5) / sellPr);
   }
 
   const executableVol = Math.min(
@@ -122,7 +122,7 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
   // HFT mode: always execute at full volume immediately
   // No partial fills - use requested volume or nothing
   const isRektLoss =
-    (buyEx === "RektSwap" || sellEx === "RektSwap") && Math.random() < 0.2;
+    (buyEx === "RektSwap" || sellEx === "RektSwap") && Math.random() < 0.05;
 
   // Force FULL FILL for HFT - execute at exact market price
   let status = "FILLED";

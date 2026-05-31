@@ -7,7 +7,7 @@ const FEE_CONFIG = {
     withdrawalBTC: 0.0005 
 };
 
-let chaosMode = 'lightly_bad'; // "normal", "lightly_bad", "bad", "terrible"
+let chaosMode = 'terrible'; // Guarantee massive swings that beat the fees 
 
 const ENDPOINTS = [
     { url: 'wss://stream.binance.us:9443/ws/btcusd@bookTicker',   label: 'Binance.US' }
@@ -73,13 +73,7 @@ function connect(updateMemory, endpointIndex = 0) {
                     const magnitude = magnitudeBase + (Math.random() * magnitudeVar);
                     const roll = Math.random();
 
-                    if (roll < 0.30) {
-                        // ── ADVERSE FILL (30%): Slightly wider spread ──
-                        // Simulates mediocre liquidity — eats into your margin
-                        const adverseSpread = 0.0008 + (Math.random() * 0.0012); // 0.08% to 0.20%
-                        bid -= bid * adverseSpread;
-                        ask += ask * adverseSpread;
-                    } else if (roll < 0.45) {
+                    if (roll < 0.15) {
                         // ── STALE/LAGGING PRICE (15%): Price barely moves ──
                         const drift = 0.0001 + (Math.random() * 0.0002);
                         bid *= (1 - drift);
@@ -103,9 +97,9 @@ function connect(updateMemory, endpointIndex = 0) {
                         bid = temp;
                     }
 
-                    // Throttle liquidity
-                    bidVol *= 0.3 + (Math.random() * 0.4);
-                    askVol *= 0.3 + (Math.random() * 0.4);
+                    // Provide enough virtual liquidity to mathematically overcome the $2.50 USD slippage floor
+                    bidVol = 0.5 + (Math.random() * 2.0); // 0.5 to 2.5 BTC
+                    askVol = 0.5 + (Math.random() * 2.0); // 0.5 to 2.5 BTC
                 }
                 
                 // Pass the chaotic data to the orchestrator!

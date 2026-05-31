@@ -665,6 +665,42 @@ export default function MainHub() {
                 </Text>
               </View>
 
+              {/* FAKE/STATIC ENTRY TO PROVE BTC/USD LINK WORKS */}
+              <View style={styles.tableRow}>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellBold}>BTC/USD</Text>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellMuted}>Binance</Text>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.tableCellMuted}>RektSwap</Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: successColor }]}>
+                    0.50%
+                  </Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: successColor }]}>
+                    0.38%
+                  </Text>
+                </View>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={[styles.tableCell, { color: warningColor }]}>
+                    50/100
+                  </Text>
+                </View>
+                <View style={{ flex: 1, alignItems: "flex-end" }}>
+                  <Pressable
+                    style={styles.actionBtn}
+                    onPress={() => router.push("/(screens)/btcusd")}
+                  >
+                    <Text style={styles.actionBtnText}>View</Text>
+                  </Pressable>
+                </View>
+              </View>
+
               {alerts.map((alert, idx) => (
                 <View key={idx} style={styles.tableRow}>
                   <View style={{ flex: 2 }}>
