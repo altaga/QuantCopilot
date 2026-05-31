@@ -6,10 +6,16 @@ const { evaluate, DEFAULT_RULES } = require("../ws_server/tools/risk-engine");
 const DISPLAY_HZ = 2; // Hz (2 refreshes per second in the console)
 const DISPLAY_INTERVAL_MS = Math.round(1000 / DISPLAY_HZ);
 
+const ENABLE_REKTSWAP = true; // Toggle to false to disable RektSwap mock exchange
+
 const EXCHANGES = [
     'binance', 'kraken', 'coinbase', 'okx', 'bitfinex',
-    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin', 'rektswap'
+    'bybit', 'gateio', 'gemini', 'bitstamp', 'kucoin'
 ];
+
+if (ENABLE_REKTSWAP) {
+    EXCHANGES.push('rektswap');
+}
 
 const EST_SLIPPAGE_USD = 2.5;
 
@@ -51,14 +57,14 @@ function addOpportunityLog(opp, verdict) {
     }
 }
 
-function updateMemory(exchange, bid, ask) {
+function updateMemory(exchange, bidPrice, bidVol, askPrice, askVol) {
     let updated = false;
-    if (bid !== null) {
-        const num = parseFloat(bid);
+    if (bidPrice !== null) {
+        const num = parseFloat(bidPrice);
         if (num > 0) { marketData[exchange].bid = num; updated = true; }
     }
-    if (ask !== null) {
-        const num = parseFloat(ask);
+    if (askPrice !== null) {
+        const num = parseFloat(askPrice);
         if (num > 0) { marketData[exchange].ask = num; updated = true; }
     }
 
@@ -78,9 +84,9 @@ function detectCrossExchangeArbitrage() {
             const exchangeB = exchanges[j]; // Sell here
 
             const askA = marketData[exchangeA].ask;
-            const volA = 1.5; // Mocking volume for local test
+            const volA = 0.05; // Realistic mock volume (approx $3,500 exposure)
             const bidB = marketData[exchangeB].bid;
-            const volB = 1.5;
+            const volB = 0.05;
 
             if (!askA || !bidB || askA === 0 || bidB === 0) continue;
 
@@ -130,22 +136,25 @@ async function start() {
     
     const modules = EXCHANGES.map(name => ({ name, mod: require(`./ws_modules/${name}`) }));
 
-    async function connectModule(name, mod) {
+    // Phase 1: Async Bootstrapping
+    const loadPromises = modules.map(async ({ name, mod }) => {
         if (typeof mod.getFees === 'function') {
             const exchangeKey = name.charAt(0).toUpperCase() + name.slice(1);
             globalExchangeFees[exchangeKey] = mod.getFees();
         }
-
         if (typeof mod.load === 'function') {
             try {
                 await mod.load(); 
             } catch (err) {
                 console.error(`❌ [${name.toUpperCase()}] Pre-flight Error:`, err.message);
-                setTimeout(() => connectModule(name, mod), 5000); 
-                return;
             }
         }
+    });
 
+    await Promise.all(loadPromises);
+
+    // Phase 2: Synchronous Connections
+    modules.forEach(({ name, mod }) => {
         let ws;
         try {
             ws = mod.connect(updateMemory);
@@ -153,16 +162,11 @@ async function start() {
             console.error(`❌ [${name.toUpperCase()}] Critical connection error:`, err.message);
             return;
         }
-
         if (!ws) return;
-
         ws.on('close', () => {
-            console.warn(`⚠️ [${name.toUpperCase()}] Disconnected. Reconnecting in 5s...`);
-            setTimeout(() => connectModule(name, mod), 5000);
+            console.warn(`⚠️ [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
         });
-    }
-
-    await Promise.all(modules.map(({ name, mod }) => connectModule(name, mod)));
+    });
 
     console.log(`✅ [CCM] Connections established. Starting display at ${DISPLAY_HZ} Hz...\n`);
 

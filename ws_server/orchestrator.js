@@ -241,47 +241,37 @@ async function start(redisPub) {
     mod: require(`./ws_modules/${name}`),
   }));
 
-  async function connectModule(name, mod) {
+  // Phase 1: Async Bootstrapping
+  const loadPromises = modules.map(async ({ name, mod }) => {
     if (typeof mod.getFees === "function") {
       const exchangeKey = name.charAt(0).toUpperCase() + name.slice(1);
       globalExchangeFees[exchangeKey] = mod.getFees();
     }
-
     if (typeof mod.load === "function") {
       try {
         await mod.load();
       } catch (err) {
-        console.error(
-          `❌ [${name.toUpperCase()}] Pre-flight Error:`,
-          err.message,
-        );
-        setTimeout(() => connectModule(name, mod), 5000);
-        return;
+        console.error(`❌ [${name.toUpperCase()}] Pre-flight Error:`, err.message);
       }
     }
+  });
 
+  await Promise.all(loadPromises);
+
+  // Phase 2: Synchronous Connections
+  modules.forEach(({ name, mod }) => {
     let ws;
     try {
       ws = mod.connect(updateMemory);
     } catch (err) {
-      console.error(
-        `❌ [${name.toUpperCase()}] Critical connection error:`,
-        err.message,
-      );
+      console.error(`❌ [${name.toUpperCase()}] Critical connection error:`, err.message);
       return;
     }
-
     if (!ws) return;
-
     ws.on("close", () => {
-      console.warn(
-        `⚠️ [${name.toUpperCase()}] Disconnected. Reconnecting in 5s...`,
-      );
-      setTimeout(() => connectModule(name, mod), 5000);
+      console.warn(`⚠️ [${name.toUpperCase()}] Disconnected. Orchestrator handled disconnect...`);
     });
-  }
-
-  await Promise.all(modules.map(({ name, mod }) => connectModule(name, mod)));
+  });
 
   console.log(
     `✅ [CCM] Connections and Fees established. Publishing ticks on "${TOPIC}" at ${PUBLISH_HZ} Hz.\n`,

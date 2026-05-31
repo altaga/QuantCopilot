@@ -61,13 +61,15 @@ function connect(updateMemory) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        if (j.type === 'message' && j.data) {
-            updateMemory('Kucoin', 
-                parseFloat(j.data.bestBid), parseFloat(j.data.bestBidSize), 
-                parseFloat(j.data.bestAsk), parseFloat(j.data.bestAskSize)
-            );
-        }
+        try {
+            const j = JSON.parse(data);
+            if (j.type === 'message' && j.data) {
+                updateMemory('Kucoin', 
+                    parseFloat(j.data.bestBid), parseFloat(j.data.bestBidSize), 
+                    parseFloat(j.data.bestAsk), parseFloat(j.data.bestAskSize)
+                );
+            }
+        } catch (_) { return; }
     });
 
     ws.on('error', (err) => console.error('❌ [KUCOIN] Error:', err.message));

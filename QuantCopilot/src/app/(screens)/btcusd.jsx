@@ -1,7 +1,7 @@
-import { createChart, LineSeries } from "lightweight-charts";
-import React, { useContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
+import { createChart, LineSeries } from "lightweight-charts";
 import { ArrowLeft } from "lucide-react-native";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -38,6 +38,7 @@ import {
 import ContextModule from "../../providers/contextModule";
 import { createMqttClient } from "../../utilsApp/mqttClient";
 import { remoteLog } from "../../utilsApp/remoteLog";
+import { getMqttToken } from "../../utilsApp/tokenGenerator";
 
 // Fallback risk score calculator for trades without server-computed score
 const EXCHANGE_TRUST = {
@@ -66,7 +67,6 @@ function deriveRiskScore(buyEx, sellEx) {
   }
   return Math.round(base);
 }
-import { getMqttToken } from "../../utilsApp/tokenGenerator";
 
 const PnLBar = React.memo(({ pnl }) => {
   const GlobalStyles = createGlobalStyles();
@@ -634,7 +634,7 @@ const StrategyPrompter = React.memo(
                     style={[
                       styles.toggleThumb,
                       draftRules.avoidHighVolatility &&
-                        styles.toggleThumbActive,
+                      styles.toggleThumbActive,
                     ]}
                   />
                 </Pressable>
@@ -725,8 +725,8 @@ const StrategyPrompter = React.memo(
                       ...draftRules,
                       minSpreadPercent:
                         minSpreadText === "" ||
-                        minSpreadText === "." ||
-                        minSpreadText === "-"
+                          minSpreadText === "." ||
+                          minSpreadText === "-"
                           ? 0
                           : parseFloat(minSpreadText),
                       maxExposureUSD:
@@ -818,32 +818,32 @@ const OpportunityMathDepth = React.memo(
     // Normalize trade/alert fields for consistent display (handles both TRADE_EXECUTED and ARBITRAGE_ALERTS formats)
     const displayTrade = rawTrade
       ? {
-          id: rawTrade.id,
-          buyExchange: buyEx,
-          sellExchange: sellEx,
-          buyPrice:
-            rawTrade.buyPrice ||
-            rawTrade.price1 ||
-            null,
-          sellPrice:
-            rawTrade.sellPrice ||
-            rawTrade.price2 ||
-            null,
-          profitUSD:
-            rawTrade.netProfitUSD ||
-            rawTrade.profitUSD ||
-            rawTrade.profit ||
-            null,
-          volume:
-            rawTrade.volumeBTC || rawTrade.volume || rawTrade.size || null,
-          status: rawTrade.status || rawTrade.state || "UNKNOWN",
-          // Computed from exchanges if no server score
-          riskScore:
-            rawTrade.riskScore ||
-            rawTrade.score ||
-            (buyEx && sellEx ? deriveRiskScore(buyEx, sellEx) : 50),
-          timestamp: rawTrade.timestamp,
-        }
+        id: rawTrade.id,
+        buyExchange: buyEx,
+        sellExchange: sellEx,
+        buyPrice:
+          rawTrade.buyPrice ||
+          rawTrade.price1 ||
+          null,
+        sellPrice:
+          rawTrade.sellPrice ||
+          rawTrade.price2 ||
+          null,
+        profitUSD:
+          rawTrade.netProfitUSD ||
+          rawTrade.profitUSD ||
+          rawTrade.profit ||
+          null,
+        volume:
+          rawTrade.volumeBTC || rawTrade.volume || rawTrade.size || null,
+        status: rawTrade.status || rawTrade.state || "UNKNOWN",
+        // Computed from exchanges if no server score
+        riskScore:
+          rawTrade.riskScore ||
+          rawTrade.score ||
+          (buyEx && sellEx ? deriveRiskScore(buyEx, sellEx) : 50),
+        timestamp: rawTrade.timestamp,
+      }
       : null;
 
     return (
@@ -980,10 +980,10 @@ const OpportunityMathDepth = React.memo(
                   >
                     {displayTrade.buyPrice > 0
                       ? (
-                          ((displayTrade.sellPrice - displayTrade.buyPrice) /
-                            displayTrade.buyPrice) *
-                          100
-                        ).toFixed(2)
+                        ((displayTrade.sellPrice - displayTrade.buyPrice) /
+                          displayTrade.buyPrice) *
+                        100
+                      ).toFixed(2)
                       : 0}
                     %
                   </Text>
@@ -1347,10 +1347,10 @@ export default function MainScreen() {
               setPnl((prev) =>
                 prev
                   ? {
-                      ...prev,
-                      totalBalanceUSD:
-                        (prev.totalBalanceUSD || 0) + tradeProfit,
-                    }
+                    ...prev,
+                    totalBalanceUSD:
+                      (prev.totalBalanceUSD || 0) + tradeProfit,
+                  }
                   : { totalBalanceUSD: tradeProfit },
               );
             }
@@ -1831,9 +1831,9 @@ export default function MainScreen() {
             >
               {typeof pnl?.totalBalanceUSD === "number"
                 ? pnl.totalBalanceUSD.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
                 : "loading..."}{" "}
               USDT
             </Text>

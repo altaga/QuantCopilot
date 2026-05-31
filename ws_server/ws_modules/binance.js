@@ -36,10 +36,12 @@ function connect(updateMemory, endpointIndex = 0) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        if (j.b && j.a && j.B && j.A) {
-            updateMemory('Binance', parseFloat(j.b), parseFloat(j.B), parseFloat(j.a), parseFloat(j.A));
-        }
+        try {
+            const j = JSON.parse(data);
+            if (j.b && j.a && j.B && j.A) {
+                updateMemory('Binance', parseFloat(j.b), parseFloat(j.B), parseFloat(j.a), parseFloat(j.A));
+            }
+        } catch (_) { return; }
     });
 
     ws.on('unexpected-response', () => {

@@ -203,6 +203,11 @@ Este directorio contiene el cerebro algorítmico del proyecto, pero despojado de
   node orchestrator.js
   ```
 
+> **Tip de Auditoría:** Si ejecutas este módulo *standalone*, podrás visualizar estos valores interactivos en tu consola (la ingesta de L2, parámetros de riesgo y el *log* de ejecuciones). **Esta es la mejor manera de entender cómo razona y opera el backend en vivo.**
+<img src="./Images/ws_orchestrator.png" alt="Log del orquestador standalone en terminal">
+
+> **Sobre RektSwap:** Por defecto, esta simulación local tiene habilitado **RektSwap** (el Nodo 11). Este es un exchange ficticio y caótico diseñado específicamente para inyectar *spreads* artificiales. Su propósito es forzar al Motor de Riesgo a reaccionar continuamente, permitiendo visualizar cómo el sistema aprueba operaciones válidas y bloquea los falsos positivos. Si deseas probar el orquestador **únicamente** con datos reales de los otros 10 exchanges (donde el arbitraje es mucho más raro), puedes apagarlo cambiando `const ENABLE_REKTSWAP = true;` a `false` en la línea 9 de `ws_orchestrator/orchestrator.js`.
+
 ### 3. Servidor HFT de Producción (`ws_server/`)
 Este es el clúster integral y definitivo (el que corre en AWS).
 * **Propósito:** Empaqueta tanto los adaptadores de ingesta como el orquestador matemático, y les añade una capa de distribución masiva y asíncrona mediante un **Broker MQTT** y una **API REST**. Es el servidor *backend* completo al que debe conectarse la aplicación gráfica.

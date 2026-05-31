@@ -1,9 +1,9 @@
 const WebSocket = require('ws');
 
-const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@bookTicker');
+const ws = new WebSocket('wss://stream.binance.us:9443/ws/btcusd@bookTicker');
 
 ws.on('open', () => {
-    console.log('✅ Connected to Binance (BTC/USDT)');
+    console.log('✅ Connected to Binance (BTC/USD)');
 });
 
 ws.on('message', (data) => {

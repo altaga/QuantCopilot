@@ -9,6 +9,15 @@ const FEE_CONFIG = {
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://advanced-trade-ws.coinbase.com');
+    let isReconnecting = false;
+
+    const handleDisconnect = () => {
+        if (isReconnecting) return;
+        isReconnecting = true;
+        updateMemory('Coinbase', 0, 0, 0, 0);
+        console.warn('⚠️ [COINBASE] Desconectado. Reconectando en 5s...');
+        setTimeout(() => connect(updateMemory), 5000);
+    };
 
     ws.on('open', () => {
         console.log('✅ [COINBASE] Connected');
@@ -28,7 +37,13 @@ function connect(updateMemory) {
         } catch (_) {} 
     });
 
-    ws.on('error', (err) => console.error('❌ [COINBASE] Error:', err.message));
+    ws.on('error', (err) => {
+        console.error('❌ [COINBASE] Error:', err.message);
+        ws.terminate();
+    });
+
+    ws.on('close', handleDisconnect);
+
     return ws;
 }
 

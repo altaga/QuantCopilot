@@ -1,47 +1,55 @@
-import React, { useEffect, useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Platform,
-  ScrollView,
-  Dimensions,
-  Image,
-} from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import { useEffect, useState } from "react";
 import {
-  Activity,
-  ArrowRight,
-  Home,
-  Compass,
-  Cpu,
-  Briefcase,
-  BarChart2,
-  LineChart,
-  Bell,
-  FileText,
-  Settings,
-  ShieldAlert,
-  Zap,
-} from "lucide-react-native";
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+
+const EXCHANGE_URLS = {
+  binance: "https://www.binance.com/en/trade/BTC_USDT",
+  okx: "https://www.okx.com/trade-spot/btc-usdt",
+  bybit: "https://www.bybit.com/en/trade/spot/BTC/USDT",
+  kraken: "https://pro.kraken.com/app/trade/btc-usd",
+  coinbase: "https://advanced.coinbase.com/trade/BTC-USD",
+  bitfinex: "https://trading.bitfinex.com/t/BTC:UST",
+  gateio: "https://www.gate.io/trade/BTC_USDT",
+  gemini: "https://exchange.gemini.com/trade/BTCUSD",
+  bitstamp: "https://www.bitstamp.net/market/btcusd/",
+  kucoin: "https://www.kucoin.com/trade/BTC-USDT",
+};
+
+const openExchange = (exchange) => {
+  const url = EXCHANGE_URLS[exchange];
+  if (!url) return;
+  if (Platform.OS === "web") {
+    window.open(url, "_blank");
+  } else {
+    Linking.openURL(url);
+  }
+};
+
 import {
-  createGlobalStyles,
+  accentColor,
   backgroundColor,
-  cardColor,
-  elevatedColor,
   borderColor,
+  cardColor,
+  createGlobalStyles,
+  dangerColor,
+  elevatedColor,
+  infoColor,
+  successColor,
+  textMuted,
   textPrimary,
   textSecondary,
-  textMuted,
-  accentColor,
-  whiteColor,
-  successColor,
-  dangerColor,
-  borderLight,
-  infoColor,
   warningColor,
+  whiteColor
 } from "../../core/styles";
 import { createMqttClient } from "../../utilsApp/mqttClient";
 import { getMqttToken } from "../../utilsApp/tokenGenerator";
@@ -199,7 +207,7 @@ export default function MainHub() {
             return [data, ...prev].slice(0, 50);
           });
         }
-      } catch (e) {}
+      } catch (e) { }
     });
 
     return () => client.end();
@@ -307,46 +315,126 @@ export default function MainHub() {
               </Text>
 
               <View style={{ flexDirection: "row", gap: 6 }}>
-                <Image
-                  source={require("../../assets/exchanges/binance.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/okx.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/bybit.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/kraken.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/coinbase.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/bitfinex.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/gateio.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/gemini.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/bitstamp.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
-                <Image
-                  source={require("../../assets/exchanges/kucoin.png")}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                />
+                <Pressable
+                  onPress={() => openExchange("binance")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/binance.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("okx")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/okx.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("bybit")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/bybit.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("kraken")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/kraken.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("coinbase")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/coinbase.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("bitfinex")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/bitfinex.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("gateio")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/gateio.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("gemini")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/gemini.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("bitstamp")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/bitstamp.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => openExchange("kucoin")}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    Platform.OS === "web" ? { cursor: "pointer" } : {},
+                  ]}
+                >
+                  <Image
+                    source={require("../../assets/exchanges/kucoin.png")}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </Pressable>
               </View>
             </View>
 
@@ -379,9 +467,9 @@ export default function MainHub() {
               <Text style={[styles.navStatValue, { color: whiteColor }]}>
                 {pnl.totalBalanceUSD !== undefined
                   ? pnl.totalBalanceUSD.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
                   : "12,540.32"}{" "}
                 USDT
               </Text>
@@ -637,11 +725,11 @@ export default function MainHub() {
                     <Text style={[styles.tableCell, { color: successColor }]}>
                       {(alert.precioCompra || alert.buyPrice) > 0
                         ? (
-                            (((alert.precioVenta || alert.sellPrice) -
-                              (alert.precioCompra || alert.buyPrice)) /
-                              (alert.precioCompra || alert.buyPrice)) *
-                            100
-                          ).toFixed(2)
+                          (((alert.precioVenta || alert.sellPrice) -
+                            (alert.precioCompra || alert.buyPrice)) /
+                            (alert.precioCompra || alert.buyPrice)) *
+                          100
+                        ).toFixed(2)
                         : "0"}
                       %
                     </Text>

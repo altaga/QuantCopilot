@@ -11,27 +11,35 @@ function calculateTruePrice(marketData) {
 
     if (validExchanges.length === 0) return null;
 
-    // 2. Calcular un promedio simple primero para detectar outliers (Filtro de mediana)
+    // 2. Calcular la MEDIANA para detectar outliers de forma robusta
     validExchanges.forEach(ex => {
         const d = marketData[ex];
         prices.push((d.bid + d.ask) / 2);
     });
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    
+    prices.sort((a, b) => a - b);
+    let median = 0;
+    const half = Math.floor(prices.length / 2);
+    if (prices.length % 2) {
+        median = prices[half];
+    } else {
+        median = (prices[half - 1] + prices[half]) / 2.0;
+    }
 
-    // 3. Calcular VWAP filtrando outliers (desviación mayor al 2%)
+    // 3. Calcular VWAP filtrando outliers (desviación mayor al 5%)
     validExchanges.forEach(ex => {
         const d = marketData[ex];
         const midPrice = (d.bid + d.ask) / 2;
         const volume = (d.bidVol + d.askVol) / 2;
 
-        // Si el precio del exchange se desvía más del 2% del promedio, es data sucia
-        if (Math.abs(midPrice - avg) / avg < 0.02) {
+        // Si el precio del exchange se desvía más del 5% de la mediana, es data sucia
+        if (Math.abs(midPrice - median) / median < 0.05) {
             totalValue += midPrice * volume;
             totalVolume += volume;
         }
     });
 
-    return totalVolume > 0 ? totalValue / totalVolume : avg;
+    return totalVolume > 0 ? totalValue / totalVolume : median;
 }
 
 module.exports = { calculateTruePrice };

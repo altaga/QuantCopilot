@@ -7,7 +7,7 @@ const FEE_CONFIG = {
     withdrawalBTC: 0.0005 
 };
 
-let chaosMode = 'terrible'; // "normal", "bad", "terrible"
+let chaosMode = 'lightly_bad'; // "normal", "lightly_bad", "bad", "terrible"
 
 const ENDPOINTS = [
     { url: 'wss://stream.binance.us:9443/ws/btcusd@bookTicker',   label: 'Binance.US' }
@@ -53,16 +53,20 @@ function connect(updateMemory, endpointIndex = 0) {
 
                 if (chaosMode === 'normal') {
                     chaosChance = 0.05;
-                    magnitudeBase = 0.004;
-                    magnitudeVar = 0.002;
+                    magnitudeBase = 0.001;  // 0.1% (~$73) - Spread too low for arb
+                    magnitudeVar = 0.0005;  
+                } else if (chaosMode === 'lightly_bad') {
+                    chaosChance = 0.10;
+                    magnitudeBase = 0.0055; // 0.55% (~$400) - Barely beats 0.4% fees + slippage. Net profit ~$0.50
+                    magnitudeVar = 0.001;
                 } else if (chaosMode === 'bad') {
                     chaosChance = 0.15;
-                    magnitudeBase = 0.008;
-                    magnitudeVar = 0.004;
+                    magnitudeBase = 0.008;  // 0.8% (~$584) - Solid arb. Net profit ~$10
+                    magnitudeVar = 0.002;
                 } else if (chaosMode === 'terrible') {
                     chaosChance = 0.40;
-                    magnitudeBase = 0.020;
-                    magnitudeVar = 0.020;
+                    magnitudeBase = 0.015;  // 1.5% (~$1095) - Flash crash. Net profit ~$35
+                    magnitudeVar = 0.005;
                 }
 
                 if (Math.random() < chaosChance) {
@@ -107,9 +111,7 @@ function connect(updateMemory, endpointIndex = 0) {
                 // Pass the chaotic data to the orchestrator!
                 updateMemory('RektSwap', bid, bidVol, ask, askVol);
             }
-        } catch (_err) {
-            // Ignore parsing errors
-        }
+        } catch (_) { return; }
     });
 
     ws.on('unexpected-response', () => {

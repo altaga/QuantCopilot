@@ -9,6 +9,15 @@ const FEE_CONFIG = {
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://api-pub.bitfinex.com/ws/2');
+    let isReconnecting = false;
+
+    const handleDisconnect = () => {
+        if (isReconnecting) return;
+        isReconnecting = true;
+        updateMemory('Bitfinex', 0, 0, 0, 0);
+        console.warn('⚠️ [BITFINEX] Desconectado. Reconectando en 5s...');
+        setTimeout(() => connect(updateMemory), 5000);
+    };
 
     ws.on('open', () => {
         console.log('✅ [BITFINEX] Connected');
@@ -16,14 +25,21 @@ function connect(updateMemory) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        // Bitfinex Payload: [ CHANNEL_ID, [BID, BID_SIZE, ASK, ASK_SIZE, ...] ]
-        if (Array.isArray(j) && Array.isArray(j[1])) {
-            updateMemory('Bitfinex', parseFloat(j[1][0]), parseFloat(j[1][1]), parseFloat(j[1][2]), parseFloat(j[1][3]));
-        }
+        try {
+            const j = JSON.parse(data);
+            if (Array.isArray(j) && Array.isArray(j[1])) {
+                updateMemory('Bitfinex', parseFloat(j[1][0]), parseFloat(j[1][1]), parseFloat(j[1][2]), parseFloat(j[1][3]));
+            }
+        } catch (_) { return; }
     });
 
-    ws.on('error', (err) => console.error('❌ [BITFINEX] Error:', err.message));
+    ws.on('error', (err) => {
+        console.error('❌ [BITFINEX] Error:', err.message);
+        ws.terminate();
+    });
+
+    ws.on('close', handleDisconnect);
+
     return ws;
 }
 

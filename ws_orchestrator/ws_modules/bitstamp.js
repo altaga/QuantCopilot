@@ -9,6 +9,15 @@ const FEE_CONFIG = {
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://ws.bitstamp.net');
+    let isReconnecting = false;
+
+    const handleDisconnect = () => {
+        if (isReconnecting) return;
+        isReconnecting = true;
+        updateMemory('Bitstamp', 0, 0, 0, 0);
+        console.warn('⚠️ [BITSTAMP] Desconectado. Reconectando en 5s...');
+        setTimeout(() => connect(updateMemory), 5000);
+    };
 
     ws.on('open', () => {
         console.log('✅ [BITSTAMP] Connected');
@@ -16,16 +25,24 @@ function connect(updateMemory) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        if (j.event === 'data' && j.data && j.data.bids && j.data.asks) {
-            updateMemory('Bitstamp', 
-                parseFloat(j.data.bids[0][0]), parseFloat(j.data.bids[0][1]), // BID Price & Vol
-                parseFloat(j.data.asks[0][0]), parseFloat(j.data.asks[0][1])  // ASK Price & Vol
-            );
-        }
+        try {
+            const j = JSON.parse(data);
+            if (j.event === 'data' && j.data && j.data.bids && j.data.asks) {
+                updateMemory('Bitstamp', 
+                    parseFloat(j.data.bids[0][0]), parseFloat(j.data.bids[0][1]), // BID Price & Vol
+                    parseFloat(j.data.asks[0][0]), parseFloat(j.data.asks[0][1])  // ASK Price & Vol
+                );
+            }
+        } catch (_) { return; }
     });
 
-    ws.on('error', (err) => console.error('❌ [BITSTAMP] Error:', err.message));
+    ws.on('error', (err) => {
+        console.error('❌ [BITSTAMP] Error:', err.message);
+        ws.terminate();
+    });
+
+    ws.on('close', handleDisconnect);
+
     return ws;
 }
 

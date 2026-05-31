@@ -10,9 +10,11 @@ const REDIS_KEY_WALLETS = "sim:wallets";
 const REDIS_KEY_TRADES = "sim:trades";
 const MAX_TRADE_LOG = 200;
 
+const fixMath = (num) => Math.round(num * 10000) / 10000;
+
 // Starting USD balance per exchange for fresh simulation
-// 1254.032 * 10 exchanges (excl. RektSwap) = exactly 12540.32 USD total starting capital
-const INITIAL_USD_PER_EXCHANGE = 1254.032;
+// 1000 * 10 exchanges (excl. RektSwap) = exactly 10000 USD total starting capital
+const INITIAL_USD_PER_EXCHANGE = 1000;
 
 const EXCHANGES = [
   "Binance",
@@ -54,7 +56,7 @@ async function init(redisClient) {
 function buildFreshWallets() {
   const wallets = {};
   EXCHANGES.forEach((ex) => {
-    wallets[ex] = { USD: INITIAL_USD_PER_EXCHANGE, BTC: 0 };
+    wallets[ex] = { USD: fixMath(INITIAL_USD_PER_EXCHANGE), BTC: 0 };
   });
   return wallets;
 }
@@ -100,7 +102,7 @@ async function execute(opportunity, rules = {}) {
 
   // Seed BTC on sell side if needed
   if (sellWallet.BTC === 0) {
-    sellWallet.BTC = (INITIAL_USD_PER_EXCHANGE * 0.1) / sellPr;
+    sellWallet.BTC = fixMath((INITIAL_USD_PER_EXCHANGE * 0.1) / sellPr);
   }
 
   const executableVol = Math.min(
@@ -129,25 +131,26 @@ async function execute(opportunity, rules = {}) {
   // Fees
   const feeRateBuy = 0.001,
     feeRateSell = 0.001;
-  const buyCostUSD = executableVol * buyPr * (1 + feeRateBuy);
-  let sellGainUSD = executableVol * sellPr * (1 - feeRateSell);
+  const buyCostUSD = fixMath(executableVol * buyPr * (1 + feeRateBuy));
+  let sellGainUSD = fixMath(executableVol * sellPr * (1 - feeRateSell));
 
   if (isRektLoss) {
     const haircut = 0.991 + Math.random() * 0.005; // 0.991 to 0.996
-    sellGainUSD = buyCostUSD * haircut;
+    sellGainUSD = fixMath(buyCostUSD * haircut);
   }
 
-  const feesUSD =
-    executableVol * buyPr * feeRateBuy + executableVol * sellPr * feeRateSell;
+  const feesUSD = fixMath(
+    executableVol * buyPr * feeRateBuy + executableVol * sellPr * feeRateSell
+  );
   // HFT: minimal slippage (0.001% = near-zero for high-frequency)
-  const slippageUSD = buyPr * executableVol * 0.00001;
-  const netProfitUSD = sellGainUSD - buyCostUSD - slippageUSD;
+  const slippageUSD = fixMath(buyPr * executableVol * 0.00001);
+  const netProfitUSD = fixMath(sellGainUSD - buyCostUSD - slippageUSD);
 
   // Update wallets
-  buyWallet.USD -= buyCostUSD;
-  buyWallet.BTC += executableVol;
-  sellWallet.BTC -= executableVol;
-  sellWallet.USD += sellGainUSD;
+  buyWallet.USD = fixMath(buyWallet.USD - buyCostUSD);
+  buyWallet.BTC = fixMath(buyWallet.BTC + executableVol);
+  sellWallet.BTC = fixMath(sellWallet.BTC - executableVol);
+  sellWallet.USD = fixMath(sellWallet.USD + sellGainUSD);
 
   await persistWallets();
 

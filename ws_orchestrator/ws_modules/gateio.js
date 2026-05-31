@@ -9,6 +9,15 @@ const FEE_CONFIG = {
 
 function connect(updateMemory) {
     const ws = new WebSocket('wss://api.gateio.ws/ws/v4/');
+    let isReconnecting = false;
+
+    const handleDisconnect = () => {
+        if (isReconnecting) return;
+        isReconnecting = true;
+        updateMemory('Gateio', 0, 0, 0, 0);
+        console.warn('⚠️ [GATE.IO] Desconectado. Reconectando en 5s...');
+        setTimeout(() => connect(updateMemory), 5000);
+    };
 
     ws.on('open', () => {
         console.log('✅ [GATE.IO] Connected');
@@ -18,14 +27,22 @@ function connect(updateMemory) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        // Gate.io uses uppercase 'B' for Bid Size and 'A' for Ask Size
-        if (j.result && j.result.b && j.result.B) {
-            updateMemory('Gateio', parseFloat(j.result.b), parseFloat(j.result.B), parseFloat(j.result.a), parseFloat(j.result.A));
-        }
+        try {
+            const j = JSON.parse(data);
+            // Gate.io uses uppercase 'B' for Bid Size and 'A' for Ask Size
+            if (j.result && j.result.b && j.result.B) {
+                updateMemory('Gateio', parseFloat(j.result.b), parseFloat(j.result.B), parseFloat(j.result.a), parseFloat(j.result.A));
+            }
+        } catch (_) { return; }
     });
 
-    ws.on('error', (err) => console.error('❌ [GATE.IO] Error:', err.message));
+    ws.on('error', (err) => {
+        console.error('❌ [GATE.IO] Error:', err.message);
+        ws.terminate();
+    });
+
+    ws.on('close', handleDisconnect);
+
     return ws;
 }
 

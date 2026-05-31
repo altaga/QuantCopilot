@@ -19,17 +19,19 @@ function connect(updateMemory) {
     });
 
     ws.on('message', (data) => {
-        const j = JSON.parse(data);
-        if (j.ret_msg === 'pong' || j.op === 'ping') return;
-        if (j.data) {
-            const bidPrice = (j.data.b && j.data.b[0]) ? parseFloat(j.data.b[0][0]) : null;
-            const bidVol   = (j.data.b && j.data.b[0]) ? parseFloat(j.data.b[0][1]) : null;
-            
-            const askPrice = (j.data.a && j.data.a[0]) ? parseFloat(j.data.a[0][0]) : null;
-            const askVol   = (j.data.a && j.data.a[0]) ? parseFloat(j.data.a[0][1]) : null;
-            
-            updateMemory('Bybit', bidPrice, bidVol, askPrice, askVol);
-        }
+        try {
+            const j = JSON.parse(data);
+            if (j.ret_msg === 'pong' || j.op === 'ping') return;
+            if (j.data) {
+                const bidPrice = (j.data.b && j.data.b[0]) ? parseFloat(j.data.b[0][0]) : null;
+                const bidVol   = (j.data.b && j.data.b[0]) ? parseFloat(j.data.b[0][1]) : null;
+                
+                const askPrice = (j.data.a && j.data.a[0]) ? parseFloat(j.data.a[0][0]) : null;
+                const askVol   = (j.data.a && j.data.a[0]) ? parseFloat(j.data.a[0][1]) : null;
+                
+                updateMemory('Bybit', bidPrice, bidVol, askPrice, askVol);
+            }
+        } catch (_) { return; }
     });
 
     ws.on('close', () => clearInterval(ws.pingInterval));
