@@ -6,11 +6,21 @@ QuantCopilot es una plataforma de supervisión cuantitativa diseñada para ident
 
 A diferencia de los bots tradicionales, nuestro sistema no toma decisiones basándose únicamente en spreads aparentes. Cada oportunidad es evaluada considerando comisiones, liquidez, slippage, volatilidad y restricciones de ejecución para determinar su rentabilidad neta real antes de autorizar una operación.
 
-## Fast Links
-* **Aplicación en Producción:** [https://quantcopilot.expo.app/](https://quantcopilot.expo.app/)
-* **WebServer Code:** [./ws_server/](./ws_server/)
-* **App Code:** [./QuantCopilot/](./QuantCopilot/)
-* **Video Demo (Youtube):** [VIDEO DEMO](https://youtu.be/YUPet9G21Ts)
+## 🚀 Fast Links
+
+### 🎥 Video Demostración (Recomendado)
+Para entender rápidamente el funcionamiento y ver el sistema HFT en acción, te invitamos a ver nuestra demostración:
+
+<div align="center">
+  <a href="https://youtu.be/YUPet9G21Ts">
+    <img src="https://img.youtube.com/vi/YUPet9G21Ts/maxresdefault.jpg" alt="Video Demo QuantCopilot" width="800"/>
+  </a>
+</div>
+
+### 📌 Accesos Directos
+* 🌐 **Aplicación en Producción:** [https://quantcopilot.expo.app/](https://quantcopilot.expo.app/)
+* ⚙️ **WebServer Code (Backend HFT):** [Explorar `./ws_server/`](./ws_server/)
+* 🖥️ **App Code (Frontend React):** [Explorar `./QuantCopilot/`](./QuantCopilot/)
 
 ## Idea Central
 
