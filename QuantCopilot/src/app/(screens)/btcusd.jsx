@@ -40,33 +40,7 @@ import { createMqttClient } from "../../utilsApp/mqttClient";
 import { remoteLog } from "../../utilsApp/remoteLog";
 import { getMqttToken } from "../../utilsApp/tokenGenerator";
 
-// Fallback risk score calculator for trades without server-computed score
-const EXCHANGE_TRUST = {
-  Binance: 95,
-  Kraken: 90,
-  Coinbase: 88,
-  OKX: 82,
-  Bitfinex: 75,
-  Bybit: 80,
-  Gateio: 78,
-  Gemini: 72,
-  Bitstamp: 85,
-  Kucoin: 76,
-  RektSwap: 20,
-};
 
-function deriveRiskScore(buyEx, sellEx) {
-  if (!buyEx || !sellEx) return 75;
-  const buyTrust = EXCHANGE_TRUST[buyEx] || 75;
-  const sellTrust = EXCHANGE_TRUST[sellEx] || 75;
-  // Base score from average exchange trust
-  const base = (buyTrust + sellTrust) / 2;
-  // Minimal RektSwap penalty (15% off)
-  if (buyEx === "RektSwap" || sellEx === "RektSwap") {
-    return Math.round(base * 0.85);
-  }
-  return Math.round(base);
-}
 
 const PnLBar = React.memo(({ pnl }) => {
   const GlobalStyles = createGlobalStyles();
@@ -841,7 +815,7 @@ const OpportunityMathDepth = React.memo(
         riskScore:
           rawTrade.riskScore ||
           rawTrade.score ||
-          (buyEx && sellEx ? deriveRiskScore(buyEx, sellEx) : 50),
+          null,
         timestamp: rawTrade.timestamp,
       }
       : null;
@@ -998,7 +972,7 @@ const OpportunityMathDepth = React.memo(
                     Est. Slippage
                   </Text>
                   <Text style={{ color: textPrimary, fontSize: 13 }}>
-                    0.05%
+                    {((Math.max(2.5, displayTrade.buyPrice * (displayTrade.volumeBTC || 1) * 0.0001) / (displayTrade.buyPrice * (displayTrade.volumeBTC || 1))) * 100).toFixed(2)}%
                   </Text>
                 </View>
                 <View
@@ -1011,7 +985,7 @@ const OpportunityMathDepth = React.memo(
                     Taker Fees (Both)
                   </Text>
                   <Text style={{ color: textPrimary, fontSize: 13 }}>
-                    0.35%
+                    {(((exchangeFees?.[displayTrade.buyExchange?.toLowerCase()]?.taker || 0.002) + (exchangeFees?.[displayTrade.sellExchange?.toLowerCase()]?.taker || 0.002)) * 100).toFixed(2)}%
                   </Text>
                 </View>
                 <View
@@ -1040,8 +1014,8 @@ const OpportunityMathDepth = React.memo(
                     }}
                   >
                     {(
-                      (parseFloat(displayTrade.profitUSD) /
-                        displayTrade.buyPrice) *
+                      (parseFloat(displayTrade.profitUSD || 0) /
+                        ((displayTrade.buyPrice || 1) * (displayTrade.volumeBTC || 1))) *
                       100
                     ).toFixed(2)}
                     %
@@ -1054,7 +1028,7 @@ const OpportunityMathDepth = React.memo(
                   }}
                 >
                   <Text style={{ color: textSecondary, fontSize: 12 }}>
-                    Est. Profit (For $10,000)
+                    Est. Net Profit (Total Volume)
                   </Text>
                   <Text
                     style={{

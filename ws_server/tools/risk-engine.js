@@ -47,14 +47,16 @@ function calculateRiskScore(opp, rules, marketData) {
   score -= (100 - (buyTrust + sellTrust) / 2) * 0.3;
 
   // 2. Spread quality (up to -25): penalize marginal spreads
-  const minSpread = rules.minSpreadPercent || 0.2;
+  // Use ?? to allow explicit 0. Floor at 0.001 to prevent Division by Zero.
+  const minSpread = Math.max(rules.minSpreadPercent ?? 0.2, 0.001);
   const actualSpreadPct = (profit / (buyPr * vol)) * 100;
-  if (actualSpreadPct < minSpread)
-    score -= 25 * (1 - actualSpreadPct / minSpread);
+  if (actualSpreadPct < (rules.minSpreadPercent ?? 0.2)) {
+    score -= 25 * Math.max(0, (1 - actualSpreadPct / minSpread));
+  }
 
   // 3. Position size risk (up to -20)
   const posUSD = buyPr * vol;
-  const maxExp = rules.maxExposureUSD || 1000;
+  const maxExp = Math.max(rules.maxExposureUSD ?? 1000, 1);
   if (posUSD / maxExp > 0.7) score -= 20;
   else if (posUSD / maxExp > 0.5) score -= 10;
 
@@ -184,7 +186,7 @@ function evaluate(opportunity, rules = DEFAULT_RULES, marketData = {}) {
     };
   }
   // 6. Minimum spread profitability check
-  else if (rules.minSpreadPercent !== null) {
+  else if (rules.minSpreadPercent !== null && rules.minSpreadPercent !== undefined) {
     const spreadPercent =
       (opportunity.profitUSD /
         (opportunity.buyPrice * opportunity.volume)) *

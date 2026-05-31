@@ -215,12 +215,7 @@ export default function MainHub() {
 
   // Calculations for cards
   const totalOpportunities = (pnl.totalTrades || 0) + alerts.length;
-  const riskSaved =
-    (pnl.totalRiskSavedUSD || 0) +
-    auditLog.reduce(
-      (acc, log) => acc + (parseFloat(log.profitTotalUSD) || 0),
-      0,
-    );
+  const riskSaved = pnl.totalRiskSavedUSD || 0;
   return (
     <View style={styles.layout}>
       {/* ─── MAIN CONTENT ─── */}
@@ -610,7 +605,7 @@ export default function MainHub() {
             </View>
             <View style={styles.metricCard}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.metricLabel}>Max Drawdown (30d)</Text>
+                <Text style={styles.metricLabel}>Current Drawdown (24h)</Text>
                 <Text style={[styles.metricValue, { color: dangerColor }]}>
                   {(pnl.dailyPnL || 0) < 0
                     ? (pnl.dailyPnL || 0).toFixed(2)
@@ -670,42 +665,6 @@ export default function MainHub() {
                 </Text>
               </View>
 
-              {/* FAKE/STATIC ENTRY TO PROVE BTC/USD LINK WORKS */}
-              <View style={styles.tableRow}>
-                <View style={{ flex: 2 }}>
-                  <Text style={styles.tableCellBold}>BTC/USD</Text>
-                </View>
-                <View style={{ flex: 2 }}>
-                  <Text style={styles.tableCellMuted}>Binance</Text>
-                </View>
-                <View style={{ flex: 2 }}>
-                  <Text style={styles.tableCellMuted}>RektSwap</Text>
-                </View>
-                <View style={{ flex: 1.5 }}>
-                  <Text style={[styles.tableCell, { color: successColor }]}>
-                    0.50%
-                  </Text>
-                </View>
-                <View style={{ flex: 1.5 }}>
-                  <Text style={[styles.tableCell, { color: successColor }]}>
-                    0.38%
-                  </Text>
-                </View>
-                <View style={{ flex: 1.5 }}>
-                  <Text style={[styles.tableCell, { color: warningColor }]}>
-                    {alert.riskScore || 50}/100
-                  </Text>
-                </View>
-                <View style={{ flex: 1, alignItems: "flex-end" }}>
-                  <Pressable
-                    style={styles.actionBtn}
-                    onPress={() => router.push("/(screens)/btcusd")}
-                  >
-                    <Text style={styles.actionBtnText}>View</Text>
-                  </Pressable>
-                </View>
-              </View>
-
               {alerts.map((alert, idx) => (
                 <View key={idx} style={styles.tableRow}>
                   <View style={{ flex: 2 }}>
@@ -736,12 +695,13 @@ export default function MainHub() {
                   </View>
                   <View style={{ flex: 1.5 }}>
                     <Text style={[styles.tableCell, { color: successColor }]}>
-                      0.30%
+                      {((alert.profitUSD || alert.gananciaEstimadaUSD || 0) / 
+                        ((alert.buyPrice || alert.precioCompra || 1) * (alert.volume || alert.volumenEjecutable || 1)) * 100).toFixed(2)}%
                     </Text>
                   </View>
                   <View style={{ flex: 1.5 }}>
                     <Text style={[styles.tableCell, { color: warningColor }]}>
-                      {alert.riskScore || 50}/100
+                      {alert.riskScore ?? "--"}/100
                     </Text>
                   </View>
                   <View style={{ flex: 1, alignItems: "flex-end" }}>

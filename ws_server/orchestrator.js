@@ -202,7 +202,7 @@ async function detectCrossExchangeArbitrage() {
           }
 
           // ── Approved: simulate execution ──────────────────────────
-          const tradeResult = await execute(opportunity, activeRules);
+          const tradeResult = await execute(opportunity, activeRules, globalExchangeFees);
 
           // ── Calculate real risk score for display ───────────────────
           opportunity.riskScore = calculateRiskScore(
@@ -315,6 +315,8 @@ async function start(redisPub) {
       ...metricsHistory.riskSaved,
       pnl.totalRiskSavedUSD || 0,
     ].slice(-20);
+    // Note: The drawdown array here strictly tracks the vector of negative daily losses,
+    // which aligns with the frontend's "Current Drawdown (24h)" label.
     metricsHistory.drawdown = [
       ...metricsHistory.drawdown,
       (pnl.dailyPnL || 0) < 0 ? pnl.dailyPnL : 0,

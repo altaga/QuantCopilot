@@ -70,7 +70,7 @@ async function persistWallets() {
 // ─── EXECUTE ──────────────────────────────────────────────────────────────────
 // Simulates a buy on exchangeA and sell on exchangeB.
 // Handles partial fills when wallet balance is insufficient.
-async function execute(opportunity, rules = {}) {
+async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
   if (!walletsCache)
     return { status: "ERROR", reason: "Wallets not initialized" };
 
@@ -129,8 +129,8 @@ async function execute(opportunity, rules = {}) {
   if (isRektLoss) status = "REKT";
 
   // Fees
-  const feeRateBuy = 0.001,
-    feeRateSell = 0.001;
+  const feeRateBuy = globalExchangeFees[buyEx]?.taker || 0.002;
+  const feeRateSell = globalExchangeFees[sellEx]?.taker || 0.002;
   const buyCostUSD = fixMath(executableVol * buyPr * (1 + feeRateBuy));
   let sellGainUSD = fixMath(executableVol * sellPr * (1 - feeRateSell));
 
@@ -142,8 +142,8 @@ async function execute(opportunity, rules = {}) {
   const feesUSD = fixMath(
     executableVol * buyPr * feeRateBuy + executableVol * sellPr * feeRateSell
   );
-  // HFT: minimal slippage (0.001% = near-zero for high-frequency)
-  const slippageUSD = fixMath(buyPr * executableVol * 0.00001);
+  // Dynamic slippage mirroring the orchestrator floor
+  const slippageUSD = fixMath(Math.max(2.5, buyPr * executableVol * 0.0001));
   const netProfitUSD = fixMath(sellGainUSD - buyCostUSD - slippageUSD);
 
   // Update wallets
