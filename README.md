@@ -1,11 +1,35 @@
 # QuantCopilot
 
-> Capa Inteligente de Supervisión para Trading de Alta Frecuencia (HFT), Orquestación de Riesgo con IA y Ejecución de Rentabilidad Neta
+### Copiloto Inteligente de Riesgo para Arbitraje de Criptomonedas de Alta Frecuencia
+
+QuantCopilot es una plataforma de supervisión cuantitativa diseñada para identificar, evaluar y gestionar oportunidades de arbitraje entre múltiples exchanges en tiempo real.
+
+A diferencia de los bots tradicionales, nuestro sistema no toma decisiones basándose únicamente en spreads aparentes. Cada oportunidad es evaluada considerando comisiones, liquidez, slippage, volatilidad y restricciones de ejecución para determinar su rentabilidad neta real antes de autorizar una operación.
 
 ## Fast Links
 * **Aplicación en Producción:** [https://quantcopilot.expo.app/](https://quantcopilot.expo.app/)
 * **WebServer Code:** [./ws_server/](./ws_server/)
 * **App Code:** [./QuantCopilot/](./QuantCopilot/)
+* **Video Demo (Youtube):** [VIDEO DEMO](https://youtu.be/YUPet9G21Ts)
+
+## Idea Central
+
+> **"La mayoría de los bots de arbitraje buscan spreads. QuantCopilot busca rentabilidad neta."**
+
+Un spread positivo no garantiza una operación rentable.
+
+En mercados reales intervienen múltiples factores que erosionan el beneficio esperado:
+
+- Comisiones de trading
+- Costos de transferencia
+- Slippage
+- Liquidez limitada
+- Latencia de ejecución
+- Volatilidad del mercado
+
+QuantCopilot fue diseñado para resolver precisamente ese problema.
+
+Cada decisión del sistema se basa en una estimación cuantitativa de beneficio neto esperado y no únicamente en diferencias de precio observadas.
 
 ## Introducción
 
@@ -32,9 +56,57 @@ graph TD
     style F fill:#4a0f16,stroke:#f85149,color:#fff,stroke-width:2px
 ```
 
-## Problema
+## El Problema
 
-El verdadero problema es que, en el día a día, el margen de beneficio es tan pequeño que cualquier imprevisto puede convertir una operación ganadora en una pérdida. Entre las comisiones que cobran las plataformas, los tiempos de espera para que las transferencias se confirmen en la red y la volatilidad propia del mercado, el escenario cambia en cuestión de segundos. A menudo, cuando intentas completar la operación, el precio ya se movió (lo que llamamos slippage), o te das cuenta de que no hay suficiente liquidez para cerrar la venta, dejándote atrapado con el activo en un momento inoportuno. Al final, no se trata solo de encontrar una diferencia de precio, sino de luchar contra un reloj y unos costes operativos que hacen que esta actividad sea mucho más arriesgada de lo que parece a simple vista.
+Detectar una oportunidad de arbitraje es relativamente sencillo.
+
+Ejecutarla de manera rentable es significativamente más difícil.
+
+En mercados fragmentados, los precios cambian constantemente entre exchanges y los márgenes disponibles suelen ser extremadamente pequeños.
+
+Un retraso de algunos milisegundos, una comisión inesperada o una profundidad insuficiente en el libro de órdenes pueden convertir una operación aparentemente rentable en una pérdida.
+
+Por esta razón, el desafío principal no es encontrar spreads.
+
+→ El desafío es determinar cuáles de ellos siguen siendo rentables después de considerar todas las fricciones del mercado.
+---
+## Innovaciones Clave
+
+### Rentabilidad Neta en Tiempo Real
+
+El sistema calcula beneficios esperados considerando:
+
+- Comisiones de compra y venta
+- Costos de transferencia
+- Slippage
+- Profundidad del mercado
+- Restricciones de ejecución
+
+### Arquitectura Orientada a Eventos
+
+Redis y MQTT permiten desacoplar la ingesta de datos, el análisis cuantitativo y la visualización en tiempo real, manteniendo baja latencia y alta resiliencia.
+
+### Risk Engine Determinístico
+
+Toda oportunidad pasa por una capa obligatoria de validación antes de ser ejecutada.
+
+El sistema incorpora:
+
+- Límite de pérdidas diarias
+- Límite de pérdidas consecutivas
+- Control de exposición
+- Kill Switch global
+
+### AI Risk Copilot
+
+La IA no ejecuta operaciones.
+
+Su función es traducir instrucciones humanas a parámetros cuantitativos que son aplicados por el motor de riesgo.
+
+### Explicabilidad
+
+→ Cada decisión puede ser auditada y explicada al usuario mediante lenguaje natural.
+
 ---
 
 ## Arquitectura de la Solución
@@ -159,7 +231,31 @@ Para que el motor $O(N^2)$ sea efectivo, requiere un flujo de datos hiper-precis
 
 ## QuantCopilot AI Agent
 
-A nivel técnico, **los LLMs actuales son demasiado lentos** para operar directamente dentro de un bucle de *Trading* de Alta Frecuencia (sub-milisegundo). Por lo tanto, el AI Agent no ejecuta órdenes; funciona como una capa de supervisión superior (Copiloto). Su propósito es democratizar el ecosistema, permitiendo que operadores sin conocimientos hiper-expertos en matemáticas cuantitativas puedan gestionar el riesgo de la plataforma.
+Un error común es asumir que la Inteligencia Artificial debe ejecutar operaciones directamente.
+
+En sistemas de alta frecuencia esto suele ser una mala decisión.
+
+Las oportunidades de arbitraje aparecen y desaparecen en milisegundos, mientras que los modelos de lenguaje operan en escalas de tiempo mucho mayores.
+
+Por esta razón, QuantCopilot separa claramente dos responsabilidades:
+
+1. Ejecución cuantitativa determinística.
+2. Supervisión humana asistida por IA.
+
+El motor matemático continúa siendo responsable de las decisiones críticas de ejecución.
+
+La IA actúa como una capa de supervisión capaz de:
+
+- Explicar decisiones del sistema.
+- Ajustar parámetros de riesgo.
+- Analizar el estado del portafolio.
+- Traducir lenguaje natural a configuraciones cuantitativas.
+
+Por ejemplo:
+
+"Reduce mi exposición máxima a 300 dólares"
+
+es convertido automáticamente a una política de riesgo estructurada y aplicada por el Risk Engine.
 
 * **Traducción de Intención a Parámetros:** El usuario interactúa en lenguaje natural ("El mercado está volátil, sé más conservador"), y el Agente traduce esta instrucción ajustando instantáneamente las variables del Risk Engine (endureciendo los *Circuit Breakers* o aumentando la exigencia de $\Pi_{net}$).
 * **Terminal Cognitiva (Explicabilidad XAI):** Actúa como un analista *on-demand*. Mientras el motor matemático (Orquestador) opera a máxima velocidad, el Agente puede leer los registros y explicarle al usuario, en texto simple, por qué el sistema rechazó operaciones que en papel parecían rentables.
@@ -180,6 +276,15 @@ sequenceDiagram
 ```
 
 ---
+
+## Conclusión
+
+QuantCopilot no es simplemente un bot de arbitraje.
+
+Es una plataforma de supervisión cuantitativa diseñada para cerrar la brecha entre las oportunidades observadas en el mercado y las oportunidades realmente ejecutables.
+
+Mediante una arquitectura orientada a eventos, un motor de riesgo determinístico y una capa de supervisión impulsada por IA, buscamos demostrar que el futuro del trading automatizado no depende únicamente de ejecutar más rápido, sino de ejecutar de forma más inteligente.
+
 
 ## Auditoría y Acceso a la Plataforma (Entorno Live)
 
