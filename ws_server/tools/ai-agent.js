@@ -98,16 +98,29 @@ function initAgent() {
     // ⚙️ Tool 3: Set Risk Engine Rules
     const updateTradingRules = new DynamicStructuredTool({
         name: "update_trading_rules",
-        description: "Update the Risk Engine active rules (e.g. minSpreadPercent, maxExposureUSD, maxDailyLossUSD, consecutiveLossLimit, volatilityThresholdPercent, killSwitchActive).",
+        description: "Update the Risk Engine active rules (e.g. minSpreadPercent, maxExposureUSD, maxDailyLossUSD, maxConsecutiveLosses, avoidHighVolatility, killSwitch, enableRektSwap, exchangeBlacklist).",
         schema: z.object({
             minSpreadPercent: z.number().optional().describe("Minimum spread floor in percent (e.g. 0.35)"),
             maxExposureUSD: z.number().optional().describe("Exposure limit per trade (e.g. 500)"),
-            maxDailyLossUSD: z.number().optional().describe("Maximum allowed loss per day before stop (e.g. 100)"),
-            consecutiveLossLimit: z.number().optional().describe("Number of consecutive trade losses allowed (e.g. 3)"),
-            volatilityThresholdPercent: z.number().optional().describe("Volatility standard deviation percentage threshold (e.g. 1.5)"),
-            killSwitchActive: z.boolean().optional().describe("Emergency stop switch to block all executions")
+            maxDailyLossUSD: z.number().optional().describe("Maximum allowed loss per day before stop, should be negative (e.g. -100)"),
+            maxConsecutiveLosses: z.number().optional().describe("Number of consecutive trade losses allowed (e.g. 3)"),
+            avoidHighVolatility: z.boolean().optional().describe("Enable or disable high volatility avoidance lockout"),
+            killSwitch: z.boolean().optional().describe("Emergency stop switch to block all executions"),
+            enableRektSwap: z.boolean().optional().describe("Enable or disable the RektSwap simulation exchange"),
+            exchangeBlacklist: z.array(z.string()).optional().describe("List of exchanges to block (e.g. ['Binance', 'Kraken'])")
         }),
         func: async (args) => {
+            // Hard sanitize numerical inputs to prevent mathematical lockout bugs
+            if (args.maxDailyLossUSD !== undefined && args.maxDailyLossUSD > 0) {
+                args.maxDailyLossUSD = -args.maxDailyLossUSD; // Force negative
+            }
+            if (args.maxExposureUSD !== undefined && args.maxExposureUSD < 0) {
+                args.maxExposureUSD = Math.abs(args.maxExposureUSD);
+            }
+            if (args.maxConsecutiveLosses !== undefined && args.maxConsecutiveLosses < 0) {
+                args.maxConsecutiveLosses = Math.abs(args.maxConsecutiveLosses);
+            }
+            
             orchestrator.setActiveRules(args);
             return `Active rules successfully updated: ${JSON.stringify(args)}. Current active rules are now: ${JSON.stringify(orchestrator.getActiveRules())}`;
         }
@@ -139,9 +152,11 @@ Your mission is to help the user with two main tasks:
    - Call 'update_trading_rules' to set/update the rules as requested.
    - Respond explaining what rules were updated.
 
-⚠️ **CRITICAL CONSTRAINT:** You must ONLY help with and answer questions related to trading, finance, risk management, or the QuantCopilot system. If the user asks about unrelated topics (e.g. general programming, recipe creation, history, jokes, sports, pop culture, etc.), you must politely decline the request and remind the user that you are specialized strictly in quantitative trading and risk management.
-
-Provide clear, professional, and helpful responses tailored to the user's inquiry.
+⚠️ **CRITICAL BEHAVIORAL CONSTRAINTS:** 
+- You must ONLY help with and answer questions related to trading, finance, risk management, or the QuantCopilot system. If the user asks about unrelated topics, politely decline the request and remind the user of your specialized focus.
+- NEVER output Python code, scripts, or generic template language to parse data. You must analyze the data returned by tools internally and reply directly with the human-readable answer.
+- DO NOT narrate your tool usage. Never say "The current market state has been retrieved" or "I am calling a tool." Just provide the final, polished answer.
+- Keep your tone calm, professional, and crisp. Avoid repetitive robotic confirmations.
 
 User Instruction: "${userPrompt}"`)
     ];

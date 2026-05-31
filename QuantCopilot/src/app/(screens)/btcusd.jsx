@@ -502,7 +502,7 @@ const StrategyPrompter = React.memo(
             ]}
           >
             <Text style={styles.actionButtonText}>
-              {agentLoading ? "THINKING..." : "UPDATE RULES"}
+              {agentLoading ? "THINKING..." : "DISPATCH COPILOT"}
             </Text>
           </Pressable>
         </View>

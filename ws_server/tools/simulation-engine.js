@@ -164,6 +164,7 @@ async function execute(opportunity, rules = {}, globalExchangeFees = {}) {
     feesUSD: parseFloat(feesUSD.toFixed(4)),
     slippageUSD: parseFloat(slippageUSD.toFixed(4)),
     netProfitUSD: parseFloat(netProfitUSD.toFixed(4)),
+    riskScore: opportunity.riskScore || null,
     status,
     timestamp: Date.now(),
   };

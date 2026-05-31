@@ -204,15 +204,15 @@ async function detectCrossExchangeArbitrage() {
             continue; // Do not simulate or publish alert
           }
 
-          // ── Approved: simulate execution ──────────────────────────
-          const tradeResult = await execute(opportunity, activeRules, globalExchangeFees);
-
           // ── Calculate real risk score for display ───────────────────
           opportunity.riskScore = calculateRiskScore(
             opportunity,
             activeRules,
             marketData,
           );
+
+          // ── Approved: simulate execution ──────────────────────────
+          const tradeResult = await execute(opportunity, activeRules, globalExchangeFees);
 
           // Publish alert with real riskScore
           redisClientRef.publish(

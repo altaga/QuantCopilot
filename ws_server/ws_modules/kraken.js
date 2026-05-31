@@ -49,7 +49,7 @@ function connect(updateMemory) {
 
     ws.on('error', (err) => {
         // removemos listeners para forzar el garbage collector y evitar memory leaks
-        ws.removeAllListeners) ws.removeAllListeners();
+        if (ws.removeAllListeners) ws.removeAllListeners();
 
         console.error(' kraken:  Error:', err.message);
         ws.terminate();
