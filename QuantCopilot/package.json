@@ -18,7 +18,7 @@
     "expo-symbols": "~56.0.5",
     "expo-system-ui": "~56.0.5",
     "expo-web-browser": "~56.0.5",
-    "hono": "^4.12.22",
+    "hono": "^4.12.34",
     "jsonwebtoken": "^9.0.3",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.16.0",
